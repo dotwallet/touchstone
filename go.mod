@@ -1,4 +1,4 @@
-module g.mempool.com/base/touchstone
+module github.com/dotwallet/touchstone
 
 go 1.14
 

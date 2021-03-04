@@ -3,8 +3,8 @@ package controller
 import (
 	"net/http"
 
-	"g.mempool.com/base/touchstone/interceptor"
-	"g.mempool.com/base/touchstone/services"
+	"github.com/dotwallet/touchstone/interceptor"
+	"github.com/dotwallet/touchstone/services"
 )
 
 type HttpController struct {

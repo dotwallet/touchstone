@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"g.mempool.com/base/touchstone/util"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcutil/hdkeychain"
+	"github.com/dotwallet/touchstone/util"
 	"github.com/golang/glog"
 	"github.com/tyler-smith/go-bip39"
 )

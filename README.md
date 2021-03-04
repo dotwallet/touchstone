@@ -7,7 +7,6 @@ sh build.sh
 ## how to run a touchstone node
 
 ### to run a touchstone node , you at least need 
-- golang
 - mongo
 - mapi support
 - a private key of bitcoin for yourself

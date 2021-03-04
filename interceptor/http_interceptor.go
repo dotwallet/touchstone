@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"g.mempool.com/base/touchstone/util"
+	"github.com/dotwallet/touchstone/util"
 	"github.com/golang/glog"
 )
 

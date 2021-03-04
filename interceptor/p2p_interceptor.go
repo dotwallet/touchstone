@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"time"
 
-	"g.mempool.com/base/touchstone/conf"
-	"g.mempool.com/base/touchstone/message"
 	"github.com/btcsuite/btcd/btcec"
+	"github.com/dotwallet/touchstone/conf"
+	"github.com/dotwallet/touchstone/message"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"

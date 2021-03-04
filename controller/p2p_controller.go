@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"g.mempool.com/base/touchstone/interceptor"
-	"g.mempool.com/base/touchstone/message"
-	"g.mempool.com/base/touchstone/services"
+	"github.com/dotwallet/touchstone/interceptor"
+	"github.com/dotwallet/touchstone/message"
+	"github.com/dotwallet/touchstone/services"
 	"google.golang.org/grpc/metadata"
 )
 

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"g.mempool.com/base/touchstone/util"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/dotwallet/touchstone/util"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
