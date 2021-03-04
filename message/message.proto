@@ -1,0 +1,53 @@
+syntax = "proto3";
+option go_package = ".;message";
+
+
+message AuthRequest{
+    bytes pubkey=1;
+    bytes signature=2;
+    int64 timestamp=3;
+}
+
+message EmptyDataResponse{
+}
+
+message NotifyTxsRequest{
+    repeated bytes txids = 1;
+}
+
+
+message GetTxsRequest{
+    repeated bytes txids = 1;
+}
+
+message GetTxsResponse{
+    repeated bytes rawtxs=2;
+}
+
+message GetPartitionsHashRequest{
+    int64 offset=1;
+    int64 limit=2;
+}
+
+message GetPartitionsHashResponse{
+    repeated bytes hashs = 2;
+}
+
+message GetTxidsByPartitionsRequest{
+    repeated int64 ids =1;
+}
+
+message GetUnconfirmTxidsRequest{
+}
+
+message GetTxidsResponse{
+    repeated bytes txids = 1;
+}
+
+service P2p {
+    rpc NotifyTxs (NotifyTxsRequest) returns (EmptyDataResponse) {}
+    rpc GetTxs (GetTxsRequest) returns (GetTxsResponse) {}
+    rpc GetPartitionsHash (GetPartitionsHashRequest) returns (GetPartitionsHashResponse) {}
+    rpc GetTxidsByPartitions (GetTxidsByPartitionsRequest) returns (GetTxidsResponse) {}
+    rpc GetUnconfirmTxids (GetUnconfirmTxidsRequest) returns (GetTxidsResponse) {}
+}

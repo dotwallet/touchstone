@@ -1,0 +1,21 @@
+{
+    "Env": "mainnet",
+    "MongoHost": "127.0.0.1:27017",
+    "MempoolHost": "api.ddpurse.com",
+    "MempoolPkiMnemonic": "earn economy machine gauge grass during gain pencil spread absent wall ugly",
+    "MempoolPkiMnemonicPassword": "",
+    "ServerPrivatekey": "9a4d8f5f2f7ad34f90bfcafe2961aabc71bdee0df63f3c4cc2b95fbc93a5572f",
+    "PeersConfigs": [
+        {
+            "Host": "127.0.0.1:7788",
+            "Pubkey": "036af584f4f274e3b6831f9c8cfb8cce56d441887a9349cc93b180eb9a913d06cd"
+        },
+        {
+            "Host": "127.0.0.1:7788",
+            "Pubkey": "026e85c3255ad46183ee3e425247e4a326be03c4ea5f2be5f8d6280610e0376492"
+        }
+    ],
+    "P2pHost": "0.0.0.0:7788",
+    "HttpHost": "0.0.0.0:7789",
+    "DbName": "touchstone"
+}
