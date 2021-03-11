@@ -813,7 +813,6 @@ func TxPoints2TxInventory(txPoints []*models.TxPoint) *TxInventory {
 		}
 		txInventory.Vouts = append(txInventory.Vouts, txPoint)
 	}
-	fmt.Println(len(txPoints), " ", len(txInventory.Vins), " ", len(txInventory.Vouts))
 	return txInventory
 }
 
@@ -1177,7 +1176,6 @@ func (this *TouchstoneServer) SendBadgeToAddress(appid string, userid int64, use
 		vout := wire.NewTxOut(BADGE_DUST_LIMIT, script)
 		msgTx.AddTxOut(vout)
 	}
-	fmt.Println("SendBadgeToAddress 1 ", voutValue)
 	txPoints, err := this.GetAllUserUtxos(appid, userid, userIndex, badgeCode)
 	if err != nil {
 		return nil, err
@@ -1198,7 +1196,6 @@ func (this *TouchstoneServer) SendBadgeToAddress(appid string, userid int64, use
 		usedVins = append(usedVins, txPoint)
 		vinValue += txPoint.Value
 	}
-	fmt.Println("SendBadgeToAddress 2 ", vinValue)
 	change := vinValue - voutValue
 	if change < 0 {
 		return nil, errors.New("not enough badge")

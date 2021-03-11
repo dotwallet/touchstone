@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/dotwallet/touchstone/util"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
@@ -194,7 +193,6 @@ func (this *MongoDb) AggregateOne(colName string, conditions []bson.M, result in
 
 func (this *MongoDb) Foreach(colName string, conditions bson.M, result interface{}, handle func() error) error {
 	operation := func(col *mgo.Collection) error {
-		fmt.Println(util.ToJson(conditions))
 		iter := col.Find(conditions).Iter()
 		for iter.Next(result) {
 			err := handle()

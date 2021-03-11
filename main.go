@@ -153,10 +153,10 @@ func main() {
 		NeedRecomputehashPartitionsCache: make(map[int64]bool),
 	}
 
-	// p2pController := &controller.P2pController{
-	// 	TouchstoneServer: touchstoneServer,
-	// }
-	// go StartP2pServer(p2pController, config.P2pHost, config.PeersConfigs)
+	p2pController := &controller.P2pController{
+		TouchstoneServer: touchstoneServer,
+	}
+	go StartP2pServer(p2pController, config.P2pHost, config.PeersConfigs)
 
 	httpController := &controller.HttpController{
 		TouchstoneServer: touchstoneServer,
