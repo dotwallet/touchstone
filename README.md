@@ -15,7 +15,7 @@
 ## <span id="introduce">introduce</span>
 
 - [background](#background)
-- [badge script](#badgescrip)
+- [badge script](#badgescript)
 - [badge protocol](#badgeprotocol)
 ### <span id="background">background</span>
 &emsp;&emsp;for now,in the current bsv community, it has not been able to propose a practical complete layer one token issuance solution.even more and more partial layer one solutions try their best to do as many as possible jobs in layer one,it still can't just let user simply trust a transaction come from net without any layer two verification.and most partial layer one solutions also cause more fee,wait longer,worse user experience. some of them can't even transfer decentralized. so if we can't get rid of layer two verification and layer two verification cost basically same no matter what solution you take,why not just let layer two verification take more responsibility? it uses the simpler way to implement same function with no additional consumption and bring the same or even better user experience.
@@ -24,7 +24,7 @@
 
 &emsp;&emsp;badge is a token issuance solution,which mainly in layer two. it is base on utxo model,and allow anyone transfer decentralized,verify decentralized. and touchstone is a tool to verify badge transaction.
 
-### <span id="badgescrip">badge scrip</span>
+### <span id="badgescript">badge script</span>
 
 - badge vout
 
