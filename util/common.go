@@ -2,6 +2,7 @@ package util
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -40,4 +41,12 @@ func RandStringBytes(n int) string {
 		b[i] = LETTER_BYTES[rand.Intn(len(LETTER_BYTES))]
 	}
 	return string(b)
+}
+
+func GenerateStrFromStrInt64(a string, b int64) string {
+	return fmt.Sprintf("%s_%d", a, b)
+}
+
+func GenerateStrFromStrInt(a string, b int) string {
+	return fmt.Sprintf("%s_%d", a, b)
 }

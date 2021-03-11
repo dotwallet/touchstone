@@ -7,12 +7,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
 	"github.com/dotwallet/touchstone/conf"
 	"github.com/dotwallet/touchstone/interceptor"
 	"github.com/dotwallet/touchstone/mapi"
@@ -21,6 +24,11 @@ import (
 	"github.com/dotwallet/touchstone/util"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
+)
+
+const (
+	TX_VERSION       = 2
+	BADGE_DUST_LIMIT = 888
 )
 
 type LocalSingleTxSource struct {
@@ -88,6 +96,7 @@ type TouchstoneServer struct {
 	cacheLock                        sync.Mutex
 	syncTxLock                       sync.RWMutex
 	privateKey                       *btcec.PrivateKey
+	AddrInfoRepository               *models.AddrInfoRepository
 }
 
 func (this *TouchstoneServer) Peers() map[string]*Node {
@@ -189,6 +198,7 @@ func (this *TouchstoneServer) ParseMsgTx(MsgTx *wire.MsgTx, timestamp int64) (*T
 			PreIndex:  txPoint.Index,
 			BadgeCode: txPoint.BadgeCode,
 			Timestamp: timestamp,
+			State:     models.TX_POINT_STATE_MAY_BE_UNSPENT,
 		}
 		txInventory.Vins = append(txInventory.Vins, newTxPoint)
 	}
@@ -223,10 +233,12 @@ func (this *TouchstoneServer) ParseMsgTx(MsgTx *wire.MsgTx, timestamp int64) (*T
 			Addr:      badgeVout.Address.String(),
 			Txid:      MsgTx.TxHash().String(),
 			Index:     index,
+			PreIndex:  -1,
 			Type:      models.TX_POINT_TYPE_VOUT,
 			Value:     badgeVout.BadgeValue,
 			BadgeCode: badgeCode,
 			Timestamp: timestamp,
+			State:     models.TX_POINT_STATE_MAY_BE_UNSPENT,
 		}
 		voutTxPoints = append(voutTxPoints, newOutPoint)
 	}
@@ -620,6 +632,47 @@ func (this *TouchstoneServer) ConnectPeerLoop(peerConfigs []*conf.PeerConfig) {
 	}
 }
 
+func (this *TouchstoneServer) SetSpent() error {
+	feeQuote, err := this.MapiClient.GetFeeQuote()
+	if err != nil {
+		glog.Infof("TouchstoneServer.SyncState GetFeeQuote %s", err)
+		return err
+	}
+	txPoint := &models.TxPoint{}
+	f := func() error {
+		msgTxBriefInfo, err := this.TxInfoRepository.GetMsgTxBriefInfo(txPoint.Txid)
+		if err != nil {
+			return err
+		}
+		if msgTxBriefInfo.Height == -1 || feeQuote.Payload.CurrentHighestBlockHeight-msgTxBriefInfo.Height <= 20 {
+			return nil
+		}
+		err = this.TxPointRepository.SetTxPointState(txPoint.PreTxid, txPoint.PreIndex, models.TX_POINT_TYPE_VOUT, models.TX_POINT_STATE_PRETTY_SURE_SPENT)
+		if err != nil {
+			return err
+		}
+		err = this.TxPointRepository.SetTxPointState(txPoint.Txid, txPoint.Index, models.TX_POINT_TYPE_VIN, models.TX_POINT_STATE_PRETTY_SURE_SPENT)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	return this.TxPointRepository.ForearchUnspentVinTxPoint(time.Now().Unix()-60*60, txPoint, f)
+}
+
+func (this *TouchstoneServer) SetSpentLoop() {
+	for {
+		processId := util.RandStringBytes(8)
+		glog.Infof("TouchstoneServer SetSpentLoop start %s", processId)
+		err := this.SetSpent()
+		if err != nil {
+			glog.Infof("TouchstoneServer CheckSpentLoop SetSpent %s %s", err, processId)
+		}
+		glog.Infof("TouchstoneServer SetSpentLoop done %s", processId)
+		time.Sleep(time.Minute * 10)
+	}
+}
+
 func (this *TouchstoneServer) SyncStateLoop() {
 	count := 0
 	syncAll := false
@@ -747,6 +800,7 @@ func (this *TouchstoneServer) Init(nodeConfigs []*conf.PeerConfig, privateKeyHex
 	}
 	go this.SyncStateLoop()
 	go this.CheckTxStateLoop()
+	go this.SetSpentLoop()
 	return nil
 }
 
@@ -757,8 +811,9 @@ func TxPoints2TxInventory(txPoints []*models.TxPoint) *TxInventory {
 			txInventory.Vins = append(txInventory.Vins, txPoint)
 			continue
 		}
-		txInventory.Vouts = append(txInventory.Vins, txPoint)
+		txInventory.Vouts = append(txInventory.Vouts, txPoint)
 	}
+	fmt.Println(len(txPoints), " ", len(txInventory.Vins), " ", len(txInventory.Vouts))
 	return txInventory
 }
 
@@ -858,4 +913,314 @@ func (this *TouchstoneServer) GetPartitionsTxids(request *message.GetTxidsByPart
 		}
 	}
 	return getTxidsResponse, nil
+}
+
+func (this *TouchstoneServer) SetAddrInfo(appid string, userId int64, userIndex int64, addr string) error {
+	addrInfo := &models.AddrInfo{
+		Appid:     appid,
+		UserID:    userId,
+		UserIndex: userIndex,
+		Addr:      addr,
+		Timestamp: time.Now().Unix(),
+	}
+	return this.AddrInfoRepository.AddOrUpdateAddrInfo(addrInfo)
+}
+
+type TxPointsSorter []*models.TxPoint
+
+func (this TxPointsSorter) Len() int {
+	return len(this)
+}
+
+func (this TxPointsSorter) Swap(i, j int) {
+	this[i], this[j] = this[j], this[i]
+}
+
+func (this TxPointsSorter) Less(i, j int) bool {
+	return this[i].Timestamp < this[j].Timestamp
+}
+
+func PageTxPoints(txPoints []*models.TxPoint, offset int, limit int) []*models.TxPoint {
+	sort.Sort(TxPointsSorter(txPoints))
+	result := make([]*models.TxPoint, 0, 8)
+	if len(txPoints) <= offset {
+		return result
+	}
+	if len(txPoints) < limit+offset {
+		result = txPoints[offset:]
+		return result
+	}
+	result = txPoints[offset : limit+offset]
+	return result
+}
+
+func (this *TouchstoneServer) CalculateUtxos(txPoints []*models.TxPoint) []*models.TxPoint {
+	SpentUtxoSet := make(map[string]bool)
+	for _, txPoint := range txPoints {
+		if txPoint.Type != models.TX_POINT_TYPE_VIN {
+			continue
+		}
+		key := util.GenerateStrFromStrInt(txPoint.PreTxid, txPoint.PreIndex)
+		SpentUtxoSet[key] = true
+	}
+	result := make([]*models.TxPoint, 0, 8)
+	for _, txPoint := range txPoints {
+		if txPoint.Type != models.TX_POINT_TYPE_VOUT {
+			continue
+		}
+		key := util.GenerateStrFromStrInt(txPoint.Txid, txPoint.Index)
+		_, ok := SpentUtxoSet[key]
+		if ok {
+			continue
+		}
+		result = append(result, txPoint)
+	}
+	return result
+}
+
+func (this *TouchstoneServer) GetAllAddrUtxos(addr string, badgeCode string) ([]*models.TxPoint, error) {
+	txPoints, err := this.TxPointRepository.GetTxPointsByAddr(addr, badgeCode, models.TX_POINT_STATE_MAY_BE_UNSPENT)
+	if err != nil {
+		return nil, err
+	}
+	return this.CalculateUtxos(txPoints), nil
+}
+
+type GetUtxosResult struct {
+	Utxos []*models.TxPoint `json:"utxos"`
+}
+
+func (this *TouchstoneServer) GetAddrUtxos(addr string, badgeCode string, offset int, limit int) (*GetUtxosResult, error) {
+	utxos, err := this.GetAllAddrUtxos(addr, badgeCode)
+	if err != nil {
+		return nil, err
+	}
+	return &GetUtxosResult{
+		Utxos: PageTxPoints(utxos, offset, limit),
+	}, nil
+}
+
+func (this *TouchstoneServer) GetAllUserUtxos(appid string, userid int64, userIndex int64, badgeCode string) ([]*models.TxPoint, error) {
+	txPoints, err := this.AddrInfoRepository.GetUserTxPoints(appid, userid, userIndex, badgeCode, models.TX_POINT_STATE_MAY_BE_UNSPENT)
+	if err != nil {
+		return nil, err
+	}
+	return this.CalculateUtxos(txPoints), nil
+}
+
+func (this *TouchstoneServer) GetUserUtxos(appid string, userid int64, userIndex int64, badgeCode string, offset int, limit int) (*GetUtxosResult, error) {
+	utxos, err := this.GetAllUserUtxos(appid, userid, userIndex, badgeCode)
+	if err != nil {
+		return nil, err
+	}
+	return &GetUtxosResult{
+		Utxos: PageTxPoints(utxos, offset, limit),
+	}, nil
+}
+
+func SumTxPoints(txPoints []*models.TxPoint) int64 {
+	sum := int64(0)
+	for _, txPoint := range txPoints {
+		sum += txPoint.Value
+	}
+	return sum
+}
+
+type GetBalanceRsp struct {
+	Balance int64 `json:"balance"`
+}
+
+func (this *TouchstoneServer) GetAddrBalance(addr string, badgeCode string) (*GetBalanceRsp, error) {
+	utxos, err := this.GetAllAddrUtxos(addr, badgeCode)
+	if err != nil {
+		return nil, err
+	}
+	return &GetBalanceRsp{
+		Balance: SumTxPoints(utxos),
+	}, nil
+}
+
+func (this *TouchstoneServer) GetUserBalance(appid string, userid int64, userIndex int64, badgeCode string) (*GetBalanceRsp, error) {
+	utxos, err := this.GetAllUserUtxos(appid, userid, userIndex, badgeCode)
+	if err != nil {
+		return nil, err
+	}
+	return &GetBalanceRsp{
+		Balance: SumTxPoints(utxos),
+	}, nil
+}
+
+type AddrInventory struct {
+	Addr      string `json:"addr"`
+	Txid      string `json:"txid"`
+	Timestamp int64  `json:"timestamp"`
+	Value     int64  `json:"value"`
+}
+
+type AddrInventorySorter []*AddrInventory
+
+func (this AddrInventorySorter) Len() int {
+	return len(this)
+}
+
+func (this AddrInventorySorter) Less(i, j int) bool {
+	return this[i].Timestamp > this[j].Timestamp
+}
+
+func (this AddrInventorySorter) Swap(i, j int) {
+	this[i], this[j] = this[j], this[i]
+}
+
+func TxPoints2AddrInventory(txPoints []*models.TxPoint) []*AddrInventory {
+	addrInventorys := make([]*AddrInventory, 0, 8)
+	addrInventorySet := make(map[string]*AddrInventory)
+	for _, txPoint := range txPoints {
+		addrInventory, ok := addrInventorySet[txPoint.Txid]
+		if !ok {
+			addrInventory = &AddrInventory{
+				Addr:      txPoint.Addr,
+				Txid:      txPoint.Txid,
+				Timestamp: txPoint.Timestamp,
+			}
+			addrInventorySet[txPoint.Txid] = addrInventory
+			addrInventorys = append(addrInventorys, addrInventory)
+		}
+		addrInventory.Value += txPoint.Value
+	}
+	return addrInventorys
+}
+
+func (this *TouchstoneServer) GetAllAddrInventorys(addr string, badgeCode string) ([]*AddrInventory, error) {
+	txPoints, err := this.TxPointRepository.GetTxPointsByAddr(addr, badgeCode, models.TX_POINT_STATE_ALL)
+	if err != nil {
+		return nil, err
+	}
+	return TxPoints2AddrInventory(txPoints), nil
+}
+
+func (this *TouchstoneServer) GetUserAddrInventorys(appid string, userid int64, userIndex int64, badgeCode string) ([]*AddrInventory, error) {
+	txPoints, err := this.AddrInfoRepository.GetUserTxPoints(appid, userid, userIndex, badgeCode, models.TX_POINT_STATE_ALL)
+	if err != nil {
+		return nil, err
+	}
+	return TxPoints2AddrInventory(txPoints), nil
+}
+
+func PageAddrInventorys(addrInventorys []*AddrInventory, offset int, limit int) []*AddrInventory {
+	sort.Sort(AddrInventorySorter(addrInventorys))
+	result := make([]*AddrInventory, 0, 8)
+	if len(addrInventorys) <= offset {
+		return result
+	}
+	if len(addrInventorys) < limit+offset {
+		result = addrInventorys[offset:]
+		return result
+	}
+	result = addrInventorys[offset : limit+offset]
+	return result
+}
+
+type GetAddrInventoryRsp struct {
+	AddrInventorys []*AddrInventory `json:"addr_inventorys"`
+}
+
+func (this *TouchstoneServer) GetAddrInventorys(addr string, badgeCode string, offset int, limit int) (*GetAddrInventoryRsp, error) {
+	addrInventorys, err := this.GetAllAddrInventorys(addr, badgeCode)
+	if err != nil {
+		return nil, err
+	}
+	return &GetAddrInventoryRsp{
+		AddrInventorys: PageAddrInventorys(addrInventorys, offset, limit),
+	}, nil
+}
+
+func (this *TouchstoneServer) GetUserInventorys(appid string, userid int64, userIndex int64, badgeCode string, offset int, limit int) (*GetAddrInventoryRsp, error) {
+	addrInventorys, err := this.GetUserAddrInventorys(appid, userid, userIndex, badgeCode)
+	if err != nil {
+		return nil, err
+	}
+	return &GetAddrInventoryRsp{
+		AddrInventorys: PageAddrInventorys(addrInventorys, offset, limit),
+	}, nil
+}
+
+type AddrAmount struct {
+	Addr   string
+	Amount int64
+}
+
+type SendBadgeToAddressRsp struct {
+	UnFinishedTx string            `json:"unfinished_tx"`
+	Vins         []*models.TxPoint `json:"vins"`
+}
+
+func (this *TouchstoneServer) SendBadgeToAddress(appid string, userid int64, userIndex int64, badgeCode string, changeAddrStr string, addrAmounts []*AddrAmount, amount2burn int64) (*SendBadgeToAddressRsp, error) {
+	if amount2burn < 0 {
+		return nil, errors.New("amount2burn < 0")
+	}
+	changeAddr, err := btcutil.DecodeAddress(changeAddrStr, conf.GNetParam)
+	if err != nil {
+		return nil, err
+	}
+	msgTx := wire.NewMsgTx(TX_VERSION)
+	voutValue := amount2burn
+	for _, addrAmount := range addrAmounts {
+		addr, err := btcutil.DecodeAddress(addrAmount.Addr, conf.GNetParam)
+		if err != nil {
+			return nil, err
+		}
+		script, err := util.CreateBadgeLockScript(addr, addrAmount.Amount)
+		if err != nil {
+			return nil, err
+		}
+		voutValue += addrAmount.Amount
+		vout := wire.NewTxOut(BADGE_DUST_LIMIT, script)
+		msgTx.AddTxOut(vout)
+	}
+	fmt.Println("SendBadgeToAddress 1 ", voutValue)
+	txPoints, err := this.GetAllUserUtxos(appid, userid, userIndex, badgeCode)
+	if err != nil {
+		return nil, err
+	}
+	usedVins := make([]*models.TxPoint, 0)
+	vinValue := int64(0)
+	for _, txPoint := range txPoints {
+		if vinValue >= voutValue {
+			break
+		}
+		hash, err := chainhash.NewHashFromStr(txPoint.Txid)
+		if err != nil {
+			return nil, err
+		}
+		outPoint := wire.NewOutPoint(hash, uint32(txPoint.Index))
+		vin := wire.NewTxIn(outPoint, nil, nil)
+		msgTx.AddTxIn(vin)
+		usedVins = append(usedVins, txPoint)
+		vinValue += txPoint.Value
+	}
+	fmt.Println("SendBadgeToAddress 2 ", vinValue)
+	change := vinValue - voutValue
+	if change < 0 {
+		return nil, errors.New("not enough badge")
+	}
+	if change == 0 {
+		UnFinishedTx := util.SeserializeMsgTxStr(msgTx)
+		return &SendBadgeToAddressRsp{
+			UnFinishedTx: UnFinishedTx,
+			Vins:         usedVins,
+		}, nil
+	}
+	script, err := util.CreateBadgeLockScript(changeAddr, change)
+	if err != nil {
+		return nil, err
+	}
+	vout := wire.NewTxOut(BADGE_DUST_LIMIT, script)
+	msgTx.AddTxOut(vout)
+
+	UnFinishedTx := util.SeserializeMsgTxStr(msgTx)
+
+	return &SendBadgeToAddressRsp{
+		UnFinishedTx: UnFinishedTx,
+		Vins:         usedVins,
+	}, nil
 }

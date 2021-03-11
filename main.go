@@ -53,6 +53,14 @@ func StartHttpServer(httpController *controller.HttpController, host string) {
 	r := mux.NewRouter()
 	r.HandleFunc("/v1/touchstone/sendrawtransaction", interceptor.Aspect(httpController.SendRawTransaction, &controller.SendRawTransactionReq{}))
 	r.HandleFunc("/v1/touchstone/gettxinventory", interceptor.Aspect(httpController.GetTransactionInventory, &controller.GetTransactionInventoryReq{}))
+	r.HandleFunc("/v1/touchstone/getaddrutxos", interceptor.Aspect(httpController.GetAddrUtxos, &controller.GetAddrUtxosReq{}))
+	r.HandleFunc("/v1/touchstone/getaddrbalance", interceptor.Aspect(httpController.GetAddrBalance, &controller.GetAddrBalanceReq{}))
+	r.HandleFunc("/v1/touchstone/getaddrinventorys", interceptor.Aspect(httpController.GetAddrInventorys, &controller.GetAddrInventorysReq{}))
+	r.HandleFunc("/v1/touchstone/setaddrinfo", interceptor.Aspect(httpController.SetAddrInfo, &controller.SetAddrInfoReq{}))
+	r.HandleFunc("/v1/touchstone/getuserutxos", interceptor.Aspect(httpController.GetUserUtxos, &controller.GetUserUtxosReq{}))
+	r.HandleFunc("/v1/touchstone/getuserbalance", interceptor.Aspect(httpController.GetUserBalance, &controller.GetUserBalanceReq{}))
+	r.HandleFunc("/v1/touchstone/getuserinventorys", interceptor.Aspect(httpController.GetUserInventorys, &controller.GetUserInventorysReq{}))
+	r.HandleFunc("/v1/touchstone/sendbadgetoaddress", interceptor.Aspect(httpController.SendBadgeToAddress, &controller.SendBadgeToAddressReq{}))
 	err := http.ListenAndServe(host, r)
 	if err != nil {
 		glog.Infof("StartHttpServer ListenAndServe %s", err)
@@ -119,6 +127,16 @@ func main() {
 		panic(err)
 	}
 
+	addrInfoRepository := &models.AddrInfoRepository{
+		Db: db,
+	}
+	err = addrInfoRepository.CreateIndex()
+	if err != nil {
+		glog.Infof("main 5 addrInfoRepository CreateIndex %s", err)
+		glog.Flush()
+		panic(err)
+	}
+
 	mapiClient, err := mapi.NewMempoolMapiClient(config.MempoolHost, config.MempoolPkiMnemonic, config.MempoolPkiMnemonicPassword)
 	if err != nil {
 		glog.Infof("main 6 NewMempoolMapiClient CreateIndex %s", err)
@@ -131,13 +149,14 @@ func main() {
 		TxPointRepository:                txPointRepository,
 		PartitionInfoRepository:          partitionInfoRepository,
 		MapiClient:                       mapiClient,
+		AddrInfoRepository:               addrInfoRepository,
 		NeedRecomputehashPartitionsCache: make(map[int64]bool),
 	}
 
-	p2pController := &controller.P2pController{
-		TouchstoneServer: touchstoneServer,
-	}
-	go StartP2pServer(p2pController, config.P2pHost, config.PeersConfigs)
+	// p2pController := &controller.P2pController{
+	// 	TouchstoneServer: touchstoneServer,
+	// }
+	// go StartP2pServer(p2pController, config.P2pHost, config.PeersConfigs)
 
 	httpController := &controller.HttpController{
 		TouchstoneServer: touchstoneServer,

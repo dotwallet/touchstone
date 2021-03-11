@@ -7,15 +7,22 @@ import (
 )
 
 const (
-	TXID    = "txid"
-	PRETXID = "pretxid"
-	HASH    = "hash"
-	INDEX   = "index"
-	ID      = "id"
-	HEIGHT  = "height"
-	TYPE    = "type"
-	STATE   = "state"
-	ADDR    = "addr"
+	TXID       = "txid"
+	PRETXID    = "pretxid"
+	PREINDEX   = "preindex"
+	HASH       = "hash"
+	INDEX      = "index"
+	USER_INDEX = "user_index"
+	ID         = "id"
+	HEIGHT     = "height"
+	TYPE       = "type"
+	STATE      = "state"
+	ADDR       = "addr"
+	APPID      = "appid"
+	USERID     = "userid"
+	TIMESTAMP  = "timestamp"
+	BADGE_CODE = "badge_code"
+	VALUE      = "value"
 )
 
 func NewDb(host string, dbname string) (*MongoDb, error) {

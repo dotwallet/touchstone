@@ -18,9 +18,13 @@ type PartitionInfoRepository struct {
 	Db *MongoDb
 }
 
+func (this *PartitionInfoRepository) TableName() string {
+	return TBL_PARTITION_INFO
+}
+
 func (this *PartitionInfoRepository) CreateIndex() error {
 	return this.Db.CreateIndex(
-		TBL_PARTITION_INFO,
+		this.TableName(),
 		[]*mgo.Index{
 			{
 				Key:    []string{ID},
@@ -35,13 +39,13 @@ func (this *PartitionInfoRepository) GetPartitionInfo(Id int64) (*PartitionInfo,
 	condition := bson.M{
 		ID: Id,
 	}
-	err := this.Db.GetOne(TBL_PARTITION_INFO, condition, nil, partitionInfo)
+	err := this.Db.GetOne(this.TableName(), condition, nil, partitionInfo)
 	return partitionInfo, err
 }
 
 func (this *PartitionInfoRepository) GetPartitionInfos(offset int, limit int) ([]*PartitionInfo, error) {
 	partitionInfos := make([]*PartitionInfo, 0, 1024)
-	err := this.Db.GetMany(TBL_PARTITION_INFO, nil, nil, ID, offset, limit, &partitionInfos)
+	err := this.Db.GetMany(this.TableName(), nil, nil, ID, offset, limit, &partitionInfos)
 	return partitionInfos, err
 }
 
@@ -50,7 +54,7 @@ func (this *PartitionInfoRepository) AddPartitionInfo(id int64, hash string) err
 		Id:   id,
 		Hash: hash,
 	}
-	return this.Db.Insert(TBL_PARTITION_INFO, partitionInfo)
+	return this.Db.Insert(this.TableName(), partitionInfo)
 }
 
 func (this *PartitionInfoRepository) UpdatePartitionInfo(id int64, hash string) error {
@@ -60,9 +64,9 @@ func (this *PartitionInfoRepository) UpdatePartitionInfo(id int64, hash string) 
 	updator := bson.M{
 		HASH: hash,
 	}
-	return this.Db.UpdateAll(TBL_PARTITION_INFO, condition, updator)
+	return this.Db.UpdateAll(this.TableName(), condition, updator)
 }
 
 func (this *PartitionInfoRepository) GetPartitionsCount() (int64, error) {
-	return this.Db.Count(TBL_PARTITION_INFO, nil)
+	return this.Db.Count(this.TableName(), nil)
 }

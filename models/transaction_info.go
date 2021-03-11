@@ -44,9 +44,13 @@ type TxInfoRepository struct {
 	Db *MongoDb
 }
 
+func (this *TxInfoRepository) TableName() string {
+	return TBL_RAW_TX_INFO
+}
+
 func (this *TxInfoRepository) CreateIndex() error {
 	return this.Db.CreateIndex(
-		TBL_RAW_TX_INFO,
+		this.TableName(),
 		[]*mgo.Index{
 			{
 				Key:    []string{TXID, INDEX},
@@ -66,7 +70,7 @@ func (this *TxInfoRepository) IsMsgTxClosed(txid string) (bool, error) {
 		INDEX: TX_INFO_INDEX,
 		STATE: TX_STATE_CLOSED,
 	}
-	count, err := this.Db.Count(TBL_RAW_TX_INFO, condition)
+	count, err := this.Db.Count(this.TableName(), condition)
 	if err != nil {
 		return false, err
 	}
@@ -91,7 +95,7 @@ func (this *TxInfoRepository) SetMsgTxState(txid string, state int) error {
 		updator := bson.M{
 			STATE: state,
 		}
-		return this.Db.UpdateOne(TBL_RAW_TX_INFO, condition, updator)
+		return this.Db.UpdateOne(this.TableName(), condition, updator)
 	}
 	errStr := fmt.Sprintf("not support state %d", state)
 	return errors.New(errStr)
@@ -106,7 +110,7 @@ func (this *TxInfoRepository) SetMsgTxHeightHash(txid string, height int64, hash
 		HASH:   hash,
 		HEIGHT: height,
 	}
-	return this.Db.UpdateOne(TBL_RAW_TX_INFO, condition, updator)
+	return this.Db.UpdateOne(this.TableName(), condition, updator)
 }
 
 func (this *TxInfoRepository) GetMsgTxBriefInfo(txid string) (*MsgTxBriefInfo, error) {
@@ -115,7 +119,7 @@ func (this *TxInfoRepository) GetMsgTxBriefInfo(txid string) (*MsgTxBriefInfo, e
 		INDEX: TX_INFO_INDEX,
 	}
 	msgTxBriefInfo := &MsgTxBriefInfo{}
-	err := this.Db.GetOne(TBL_RAW_TX_INFO, condition, nil, msgTxBriefInfo)
+	err := this.Db.GetOne(this.TableName(), condition, nil, msgTxBriefInfo)
 	return msgTxBriefInfo, err
 }
 
@@ -134,7 +138,7 @@ func (this *TxInfoRepository) GetMsgTxBriefInfoByHeightRange(startHeight int64, 
 			INDEX: TX_INFO_INDEX,
 		}
 	}
-	err := this.Db.GetAll(TBL_RAW_TX_INFO, condition, nil, MONGO_ID, &result)
+	err := this.Db.GetAll(this.TableName(), condition, nil, MONGO_ID, &result)
 	return result, err
 }
 
@@ -149,7 +153,7 @@ func (this *TxInfoRepository) GetMsgTxInfo(txid string) (*MsgTxInfo, error) {
 	completed := false
 	for {
 		transactionInfosTmp := make([]*RawTxInfo, 0, 8)
-		err := this.Db.GetMany(TBL_RAW_TX_INFO, condition, nil, INDEX, offset, limit, &transactionInfosTmp)
+		err := this.Db.GetMany(this.TableName(), condition, nil, INDEX, offset, limit, &transactionInfosTmp)
 		if err != nil {
 			return nil, err
 		}
@@ -190,7 +194,7 @@ func (this *TxInfoRepository) AddMsgTxInfo(msgTx *wire.MsgTx, Height int64, Bloc
 			Index: index,
 			Data:  PiecewiseRawTx,
 		}
-		err := this.Db.Insert(TBL_RAW_TX_INFO, rawTxInfo)
+		err := this.Db.Insert(this.TableName(), rawTxInfo)
 		if err != nil {
 			if !strings.Contains(err.Error(), MONGO_ERROR_DUPLICATE) {
 				return err
@@ -205,7 +209,7 @@ func (this *TxInfoRepository) AddMsgTxInfo(msgTx *wire.MsgTx, Height int64, Bloc
 		Timestamp: Timestamp,
 		State:     TX_STATE_NEW,
 	}
-	err := this.Db.Insert(TBL_RAW_TX_INFO, rawTxInfo)
+	err := this.Db.Insert(this.TableName(), rawTxInfo)
 	if err != nil {
 		if !strings.Contains(err.Error(), MONGO_ERROR_DUPLICATE) {
 			return err
@@ -241,7 +245,7 @@ func (this *TxInfoRepository) GetTxidsByHeightRangeOrderByTxid(startHeight int64
 			},
 		}
 	}
-	err := this.Db.GetAll(TBL_RAW_TX_INFO, condition, selector, TXID, &txidBsons)
+	err := this.Db.GetAll(this.TableName(), condition, selector, TXID, &txidBsons)
 	return txidBsons, err
 }
 
@@ -249,5 +253,5 @@ func (this *TxInfoRepository) DeleteMsgTx(txid string) error {
 	condition := bson.M{
 		TXID: txid,
 	}
-	return this.Db.DeleteAll(TBL_RAW_TX_INFO, condition)
+	return this.Db.DeleteAll(this.TableName(), condition)
 }

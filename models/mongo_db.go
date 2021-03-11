@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/dotwallet/touchstone/util"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
@@ -14,11 +15,19 @@ const (
 	MONGO_ERROR_DUPLICATE = "E11000"
 	MONGO_NOT_FOUND       = "not found"
 
-	MONGO_ID           = "_id"
-	MONGO_OPERATOR_SET = "$set"
-	MONGO_OPERATOR_GTE = "$gte"
-	MONGO_OPERATOR_LT  = "$lt"
-	MONGO_OPERATOR_OR  = "$or"
+	MONGO_ID                     = "_id"
+	MONGO_OPERATOR_SET           = "$set"
+	MONGO_OPERATOR_GTE           = "$gte"
+	MONGO_OPERATOR_LT            = "$lt"
+	MONGO_OPERATOR_OR            = "$or"
+	MONGO_OPERATOR_MATCH         = "$match"
+	MONGO_OPERATOR_PROJECT       = "$project"
+	MONGO_OPERATOR_UNWIND        = "$unwind"
+	MONGO_OPERATOR_LOOKUP        = "$lookup"
+	MONGO_OPERATOR_FROM          = "from"
+	MONGO_OPERATOR_LOACL_FIELD   = "localField"
+	MONGO_OPERATOR_FOREIGN_FIELD = "foreignField"
+	MONGO_OPERATOR_AS            = "as"
 )
 
 type MongoDb struct {
@@ -163,6 +172,37 @@ func (this *MongoDb) DeleteAll(colName string, condition bson.M) error {
 	operation := func(col *mgo.Collection) error {
 		_, err := col.RemoveAll(condition)
 		return err
+	}
+	return this.Exec(colName, operation)
+}
+
+func (this *MongoDb) AggregateAll(colName string, conditions []bson.M, result interface{}) error {
+	operation := func(col *mgo.Collection) error {
+		err := col.Pipe(conditions).All(result)
+		return err
+	}
+	return this.Exec(colName, operation)
+}
+
+func (this *MongoDb) AggregateOne(colName string, conditions []bson.M, result interface{}) error {
+	operation := func(col *mgo.Collection) error {
+		err := col.Pipe(conditions).One(result)
+		return err
+	}
+	return this.Exec(colName, operation)
+}
+
+func (this *MongoDb) Foreach(colName string, conditions bson.M, result interface{}, handle func() error) error {
+	operation := func(col *mgo.Collection) error {
+		fmt.Println(util.ToJson(conditions))
+		iter := col.Find(conditions).Iter()
+		for iter.Next(result) {
+			err := handle()
+			if err != nil {
+				return err
+			}
+		}
+		return iter.Err()
 	}
 	return this.Exec(colName, operation)
 }

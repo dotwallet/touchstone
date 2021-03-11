@@ -9,6 +9,7 @@ import (
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
 )
@@ -64,6 +65,46 @@ func DeserializeTxBytes(txbytes []byte) (*wire.MsgTx, error) {
 		return nil, err
 	}
 	return msgtx, nil
+}
+
+func Int64ToBytes(num int64) ([]byte, error) {
+	s1 := make([]byte, 0, 8)
+	buf := bytes.NewBuffer(s1)
+	err := binary.Write(buf, binary.LittleEndian, num)
+	if err != nil {
+		return nil, err
+	}
+	result := buf.Bytes()
+	return result, nil
+}
+
+func CreateBadgeLockScript(address btcutil.Address, value int64) ([]byte, error) {
+	if value < 0 {
+		return nil, errors.New("error value")
+	}
+	prefix, err := hex.DecodeString(BADGE_CODE_PART_HEX_PREFIX)
+	if err != nil {
+		panic(err)
+	}
+	suffix, err := hex.DecodeString(BADGE_CODE_PART_HEX_SUFFIX)
+	if err != nil {
+		panic(err)
+	}
+	result := prefix
+	result = append(result, address.ScriptAddress()...)
+	result = append(result, suffix...)
+
+	valueByte, err := Int64ToBytes(value)
+	if err != nil {
+		return nil, err
+	}
+
+	dataPart, err := txscript.NewScriptBuilder().AddOp(txscript.OP_RETURN).AddData(valueByte).Script()
+	if err != nil {
+		panic(err)
+	}
+	result = append(result, dataPart...)
+	return result, nil
 }
 
 type BadgeVout struct {
