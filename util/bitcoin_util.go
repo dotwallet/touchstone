@@ -2,6 +2,7 @@ package util
 
 import (
 	"bytes"
+	"container/list"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
+	"github.com/golang/glog"
 )
 
 const (
@@ -146,4 +148,73 @@ func ParseBadgeVoutScript(script []byte, net *chaincfg.Params) (*BadgeVout, erro
 		BadgeValue: value,
 		Address:    address,
 	}, nil
+}
+
+func SortMsgTx(msgTxs []*wire.MsgTx, processId string) {
+	txid2InResult := make(map[string]bool)
+	for _, msgTx := range msgTxs {
+		txid2InResult[msgTx.TxHash().String()] = false
+	}
+	glog.Infof("SortMsgTx len=%d %s", len(msgTxs), processId)
+	hasPre := false
+	for i := 0; i < len(msgTxs); i++ {
+		if i%10 == 0 {
+			glog.Infof("SortMsgTx index=%d", i)
+		}
+		for j := i; j < len(msgTxs); j++ {
+			hasPre = false
+			for _, vin := range msgTxs[j].TxIn {
+				InResult, ok := txid2InResult[vin.PreviousOutPoint.Hash.String()]
+				if ok {
+					if !InResult {
+						hasPre = true
+						break
+					}
+				}
+			}
+			if hasPre {
+				continue
+			}
+			txid2InResult[msgTxs[j].TxHash().String()] = true
+			msgTxs[i], msgTxs[j] = msgTxs[j], msgTxs[i]
+			break
+		}
+	}
+	return
+}
+
+func DfsSortAndDistinctMsgTxs(msgTxs []*wire.MsgTx, processId string) []*wire.MsgTx {
+	txid2MsgTxs := make(map[string]*wire.MsgTx)
+	txids := make([]string, 0, len(msgTxs))
+	for _, msgTx := range msgTxs {
+		txid2MsgTxs[msgTx.TxHash().String()] = msgTx
+	}
+	glog.Infof("DfsSortAndDistinctMsgTxs len=%d %s", len(msgTxs), processId)
+	msgTxList := list.New()
+	for index, msgTx := range msgTxs {
+		if index%10 == 0 {
+			glog.Infof("DfsSortAndDistinctMsgTxs index=%d %s", index, processId)
+		}
+		msgTxList.PushBack(msgTx)
+		for msgTxList.Len() > 0 {
+			topMsgTx := msgTxList.Remove(msgTxList.Front()).(*wire.MsgTx)
+			txids = append(txids, msgTx.TxHash().String())
+			for _, vin := range topMsgTx.TxIn {
+				preTx, ok := txid2MsgTxs[vin.PreviousOutPoint.Hash.String()]
+				if !ok {
+					continue
+				}
+				msgTxList.PushBack(preTx)
+			}
+		}
+	}
+	result := make([]*wire.MsgTx, 0, len(msgTxs))
+	for i := len(txids) - 1; i >= 0; i-- {
+		msgTx, ok := txid2MsgTxs[txids[i]]
+		if ok {
+			result = append(result, msgTx)
+			delete(txid2MsgTxs, msgTx.TxHash().String())
+		}
+	}
+	return result
 }

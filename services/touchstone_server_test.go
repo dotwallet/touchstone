@@ -157,7 +157,7 @@ func testSyncState(t *testing.T) {
 	}
 }
 
-func TestComputePartitionHash(t *testing.T) {
+func testComputePartitionHash(t *testing.T) {
 	hash, err := glbTestTouchStoneServer.ComputePartitionHash(1712)
 	if err != nil {
 		panic(err)

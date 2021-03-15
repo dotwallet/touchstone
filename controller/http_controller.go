@@ -5,6 +5,7 @@ import (
 
 	"github.com/dotwallet/touchstone/interceptor"
 	"github.com/dotwallet/touchstone/services"
+	"github.com/dotwallet/touchstone/util"
 )
 
 type HttpController struct {
@@ -180,5 +181,8 @@ func (this *SendBadgeToAddressReq) NewHttpReqBody() interceptor.HttpReqBody {
 
 func (this *HttpController) SendBadgeToAddress(rsp http.ResponseWriter, req *http.Request, httpReqStruct interceptor.HttpReqBody, reqid string) (interface{}, error) {
 	request := httpReqStruct.(*SendBadgeToAddressReq)
+	if request.Amount2Burn < 0 {
+		return nil, util.NewCodeError(util.ERR_PARAMETERS_CODE, "Amount2Burn < 0")
+	}
 	return this.TouchstoneServer.SendBadgeToAddress(*request.Appid, *request.UserID, *request.UserIndex, *request.BadgeCode, *request.ChangeAddr, request.AddrAmounts, request.Amount2Burn)
 }
