@@ -218,6 +218,13 @@ func (this *TxInfoRepository) AddMsgTxInfo(msgTx *wire.MsgTx, Height int64, Bloc
 	return nil
 }
 
+func (this *TxInfoRepository) DeleteMsgTx(txid string) error {
+	condition := bson.M{
+		TXID: txid,
+	}
+	return this.Db.DeleteAll(this.TableName(), condition)
+}
+
 type TxidBson struct {
 	Txid string `bson:"txid"`
 }
@@ -247,11 +254,4 @@ func (this *TxInfoRepository) GetTxidsByHeightRangeOrderByTxid(startHeight int64
 	}
 	err := this.Db.GetAll(this.TableName(), condition, selector, TXID, &txidBsons)
 	return txidBsons, err
-}
-
-func (this *TxInfoRepository) DeleteMsgTx(txid string) error {
-	condition := bson.M{
-		TXID: txid,
-	}
-	return this.Db.DeleteAll(this.TableName(), condition)
 }

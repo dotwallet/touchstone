@@ -64,6 +64,17 @@ func (this *TxPointRepository) CreateIndex() error {
 	)
 }
 
+func (this *TxPointRepository) ForearchUnspentVinTxPoint(lastTimestamp int64, container interface{}, handle func() error) error {
+	condition := bson.M{
+		TIMESTAMP: bson.M{
+			MONGO_OPERATOR_LT: lastTimestamp,
+		},
+		STATE: TX_POINT_STATE_MAY_BE_UNSPENT,
+		TYPE:  TX_POINT_TYPE_VIN,
+	}
+	return this.Db.Foreach(this.TableName(), condition, container, handle)
+}
+
 func (this *TxPointRepository) AddTxPoint(txPoint *TxPoint) error {
 	return this.Db.Insert(this.TableName(), txPoint)
 }
@@ -124,15 +135,4 @@ func (this *TxPointRepository) SetTxPointState(txid string, index int, Type int,
 		STATE: state,
 	}
 	return this.Db.UpdateOne(this.TableName(), conditions, updator)
-}
-
-func (this *TxPointRepository) ForearchUnspentVinTxPoint(lastTimestamp int64, container interface{}, handle func() error) error {
-	condition := bson.M{
-		TIMESTAMP: bson.M{
-			MONGO_OPERATOR_LT: lastTimestamp,
-		},
-		STATE: TX_POINT_STATE_MAY_BE_UNSPENT,
-		TYPE:  TX_POINT_TYPE_VIN,
-	}
-	return this.Db.Foreach(this.TableName(), condition, container, handle)
 }

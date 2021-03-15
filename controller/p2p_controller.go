@@ -7,6 +7,7 @@ import (
 	"github.com/dotwallet/touchstone/interceptor"
 	"github.com/dotwallet/touchstone/message"
 	"github.com/dotwallet/touchstone/services"
+	"github.com/dotwallet/touchstone/util"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -31,7 +32,7 @@ func (this *P2pController) NotifyTxs(content context.Context, request *message.N
 	if err != nil {
 		return nil, err
 	}
-	go this.TouchstoneServer.NotifiedTxs(request, pubkey)
+	go this.TouchstoneServer.NotifiedTxs(request, pubkey, util.RandStringBytes(8))
 	return &message.EmptyDataResponse{}, nil
 }
 

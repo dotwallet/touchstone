@@ -110,7 +110,7 @@ func (this *TouchstoneServer) AddNeedRecomputehashPartition(id int64) {
 }
 
 func (this *TouchstoneServer) AddNeedRecomputehashPartitionByHeight(height int64) {
-	if height == -1 {
+	if height < *conf.GStartHeight {
 		return
 	}
 	patition := (height - *conf.GStartHeight) / conf.PARTITION_BLOCK_COUNT
@@ -133,6 +133,7 @@ func (this *TouchstoneServer) ClearCacheAndSetHash() error {
 		if id == -1 {
 			continue
 		}
+		glog.Infof("TouchstoneServer.ClearCacheAndSetHash info %d", id)
 		err := this.ComputeAndSetPartitionHash(id)
 		if err != nil {
 			glog.Infof("TouchstoneServer.ClearCacheAndSetHash ComputeAndSetPartitionHash")
@@ -307,24 +308,25 @@ func SortAndDistinctMsgTxs(msgTxs []*wire.MsgTx) []*wire.MsgTx {
 	for _, msgTx := range msgTxs {
 		txs[msgTx.TxHash().String()] = msgTx
 	}
-	tmp := make([]*wire.MsgTx, 0, len(msgTxs))
+	tmp := make([]string, 0, len(msgTxs))
 	for _, msgTx := range msgTxs {
-		tmp = append(tmp, msgTx)
+		tmp = append(tmp, msgTx.TxHash().String())
 		for _, vin := range msgTx.TxIn {
 			preTx, ok := txs[vin.PreviousOutPoint.Hash.String()]
 			if ok {
-				tmp = append(tmp, preTx)
+				tmp = append(tmp, preTx.TxHash().String())
 			}
 		}
 	}
 	result := make([]*wire.MsgTx, 0, len(msgTxs))
 	for i := len(tmp) - 1; i >= 0; i-- {
-		msgTx, ok := txs[tmp[i].TxHash().String()]
+		msgTx, ok := txs[tmp[i]]
 		if ok {
 			result = append(result, msgTx)
 			delete(txs, msgTx.TxHash().String())
 		}
 	}
+	glog.Infof("SortAndDistinctMsgTxs info %s", util.ToJson(result))
 	return result
 }
 
@@ -368,7 +370,7 @@ type TxSource interface {
 	GetTxBytes([][]byte) ([][]byte, error)
 }
 
-func (this *TouchstoneServer) SyncTxs(txidBytes [][]byte, txSource TxSource) (*SyncTxsResult, error) {
+func (this *TouchstoneServer) SyncTxs(txidBytes [][]byte, txSource TxSource, processId string) (*SyncTxsResult, error) {
 	lackTxids := make([][]byte, 0, 8)
 	txStatesCache := make(map[string]*mapi.TxState)
 	needProcessTx := make([]*wire.MsgTx, 0, 8)
@@ -378,33 +380,38 @@ func (this *TouchstoneServer) SyncTxs(txidBytes [][]byte, txSource TxSource) (*S
 		txBriefInfo, err := this.TxInfoRepository.GetMsgTxBriefInfo(txid)
 		if err != nil {
 			if !strings.Contains(err.Error(), models.MONGO_NOT_FOUND) {
-				glog.Infof("TouchstoneServer.SyncTxs GetMsgTxBriefInfo err:%s", err)
+				glog.Infof("TouchstoneServer.SyncTxs GetMsgTxBriefInfo err:%s %s", err, processId)
 				return nil, err
 			}
 			txState, err := this.MapiClient.GetTxState(txid)
 			if err != nil {
-				glog.Infof("TouchstoneServer.SyncTxs GetTxState err:%s", err)
-				continue
+				glog.Infof("TouchstoneServer.SyncTxs GetTxState err:%s %s", err, processId)
+				return nil, err
 			}
 			if txState.Payload.ReturnResult != mapi.RETURN_RESULT_FAILURE {
 				txStatesCache[txid] = txState
 				lackTxids = append(lackTxids, txidByte)
+				//todo
+				glog.Infof("SyncTxs info lack: %s", hex.EncodeToString(txidByte))
 			}
 			continue
 		}
 		if txBriefInfo.State != models.TX_STATE_CLOSED {
 			msgTxInfo, err := this.TxInfoRepository.GetMsgTxInfo(txid)
 			if err != nil {
-				glog.Infof("TouchstoneServer.SyncTxs GetMsgTxInfo err:%s", err)
+				glog.Infof("TouchstoneServer.SyncTxs GetMsgTxInfo err:%s %s", err, processId)
 				return nil, err
 			}
 			this.AddNeedRecomputehashPartitionByHeight(txBriefInfo.Height)
+			//todo
+			glog.Infof("SyncTxs info still open: %s", hex.EncodeToString(txidByte))
 			needProcessTx = append(needProcessTx, msgTxInfo.MsgTx)
 		}
 		alreadyClosedTxs = append(alreadyClosedTxs, txid)
 	}
 	txsbytes, err := txSource.GetTxBytes(lackTxids)
 	if err != nil {
+		glog.Infof("TouchstoneServer.SyncTxs GetTxBytes err:%s %s", err, processId)
 		return nil, err
 	}
 
@@ -416,12 +423,12 @@ func (this *TouchstoneServer) SyncTxs(txidBytes [][]byte, txSource TxSource) (*S
 	for _, txBytes := range txsbytes {
 		msgTx, err := util.DeserializeTxBytes(txBytes)
 		if err != nil {
-			glog.Infof("TouchstoneServer.SyncTxs DeserializeTxBytes %s err:%s", err)
+			glog.Infof("TouchstoneServer.SyncTxs DeserializeTxBytes %s err:%s %s", hex.EncodeToString(txBytes), err, processId)
 			continue
 		}
 		txState, ok := txStatesCache[msgTx.TxHash().String()]
 		if !ok {
-			glog.Infof("TouchstoneServer.SyncTxs txStatesCache[msgTx.TxHash().String()] not found %s", msgTx.TxHash().String())
+			glog.Infof("TouchstoneServer.SyncTxs txStatesCache[msgTx.TxHash().String()] not found %s %s", msgTx.TxHash().String(), processId)
 			continue
 		}
 		height := int64(models.UNCONFIRM_TX_HEIGHT)
@@ -430,7 +437,7 @@ func (this *TouchstoneServer) SyncTxs(txidBytes [][]byte, txSource TxSource) (*S
 		}
 		err = this.TxInfoRepository.AddMsgTxInfo(msgTx, height, txState.Payload.BlockHash, time.Now().Unix())
 		if err != nil {
-			glog.Infof("TouchstoneServer.SyncTxs AddMsgTxInfo err:%s %s", err, msgTx.TxHash().String())
+			glog.Infof("TouchstoneServer.SyncTxs AddMsgTxInfo err:%s %s %s", err, msgTx.TxHash().String(), processId)
 			return nil, err
 		}
 		this.AddNeedRecomputehashPartitionByHeight(txState.Payload.BlockHeight)
@@ -466,7 +473,10 @@ func (this *TouchstoneServer) ComputePartitionHash(id int64) ([]byte, error) {
 			return nil, err
 		}
 	}
-	return hashComputer.Sum(nil), nil
+	hash := hashComputer.Sum(nil)
+	//todo
+	glog.Infof("ComputePartitionHash id:%d hash %s", id, hex.EncodeToString(hash))
+	return hash, nil
 }
 
 func (this *TouchstoneServer) ComputeAndSetPartitionHash(id int64) error {
@@ -486,25 +496,25 @@ func (this *TouchstoneServer) ComputeAndSetPartitionHash(id int64) error {
 	return this.PartitionInfoRepository.UpdatePartitionInfo(id, hashStr)
 }
 
-func (this *TouchstoneServer) SyncPatitions(start int64, limit int64) error {
+func (this *TouchstoneServer) SyncPatitions(start int64, limit int64, processid string) error {
 	getPartitionsHashRequest := &message.GetPartitionsHashRequest{
 		Offset: start,
 		Limit:  limit,
 	}
 	err := this.ClearCacheAndSetHash()
 	if err != nil {
-		glog.Infof("TouchstoneServer.SyncState ClearCacheAndSetHash err:%s", err)
+		glog.Infof("TouchstoneServer.SyncPatitions ClearCacheAndSetHash err:%s", err)
 		return err
 	}
 	for pubkey, peer := range this.Peers() {
 		getPartitionsHashResponse, err := peer.GetPartitionsHash(context.Background(), getPartitionsHashRequest)
 		if err != nil {
-			glog.Infof("TouchstoneServer.SyncState GetPartitionsHash %s err:%s", pubkey, err)
+			glog.Infof("TouchstoneServer.SyncPatitions GetPartitionsHash %s err:%s %s", pubkey, err, processid)
 			continue
 		}
 		partitionInfos, err := this.PartitionInfoRepository.GetPartitionInfos(int(start), int(limit))
 		if err != nil {
-			glog.Infof("TouchstoneServer.SyncState GetPartitionInfos err:%s", err)
+			glog.Infof("TouchstoneServer.SyncPatitions GetPartitionInfos err:%s %s", err, processid)
 			return err
 		}
 		getTxidsByPartitionsRequest := &message.GetTxidsByPartitionsRequest{
@@ -517,12 +527,14 @@ func (this *TouchstoneServer) SyncPatitions(start int64, limit int64) error {
 			hash, err := hex.DecodeString(partitionInfo.Hash)
 			if err != nil {
 				//todo maybe
-				glog.Infof("TouchstoneServer.SyncState DecodeString %d %s err:%s", partitionInfo.Id, partitionInfo.Hash, err)
+				glog.Infof("TouchstoneServer.SyncPatitions DecodeString %d %s err:%s", partitionInfo.Id, partitionInfo.Hash, err)
 				continue
 			}
-			if bytes.Equal(hash, getPartitionsHashResponse.Hashs[index]) {
+			peerHash := getPartitionsHashResponse.Hashs[index]
+			if bytes.Equal(hash, peerHash) {
 				continue
 			}
+			glog.Infof("TouchstoneServer.SyncPatitions hash info diff:%s %s %s %d %s", hex.EncodeToString(hash), hex.EncodeToString(peerHash), pubkey, partitionInfo.Id, processid)
 			getTxidsByPartitionsRequest.Ids = append(getTxidsByPartitionsRequest.Ids, partitionInfo.Id)
 		}
 		if len(getTxidsByPartitionsRequest.Ids) == 0 {
@@ -530,24 +542,24 @@ func (this *TouchstoneServer) SyncPatitions(start int64, limit int64) error {
 		}
 		getTxidsResponse, err := peer.GetTxidsByPartitions(context.Background(), getTxidsByPartitionsRequest)
 		if err != nil {
-			glog.Infof("TouchstoneServer.SyncState GetTxidsByPartitions %s err:%s", pubkey, err)
+			glog.Infof("TouchstoneServer.SyncPatitions GetTxidsByPartitions %s err:%s", pubkey, err)
 			continue
 		}
-		_, err = this.SyncTxs(getTxidsResponse.Txids, peer)
+		_, err = this.SyncTxs(getTxidsResponse.Txids, peer, processid)
 		if err != nil {
-			glog.Infof("TouchstoneServer.SyncState SyncTxs %s err:%s", pubkey, err)
+			glog.Infof("TouchstoneServer.SyncPatitions SyncTxs %s err:%s", pubkey, err)
 			continue
 		}
 		err = this.ClearCacheAndSetHash()
 		if err != nil {
-			glog.Infof("TouchstoneServer.SyncState ClearCacheAndSetHash err:%s", err)
+			glog.Infof("TouchstoneServer.SyncPatitions ClearCacheAndSetHash err:%s", err)
 			return err
 		}
 	}
 	return nil
 }
 
-func (this *TouchstoneServer) SyncUnconfirmTx() {
+func (this *TouchstoneServer) SyncUnconfirmTx(processid string) {
 	getUnconfirmTxidsRequest := &message.GetUnconfirmTxidsRequest{}
 	for pubkey, peer := range this.Peers() {
 		getTxidsResponse, err := peer.GetUnconfirmTxids(context.Background(), getUnconfirmTxidsRequest)
@@ -555,7 +567,7 @@ func (this *TouchstoneServer) SyncUnconfirmTx() {
 			glog.Infof("TouchstoneServer.SyncUnconfirmTx GetTxidsByHeights %s err:%s", pubkey, err)
 			continue
 		}
-		_, err = this.SyncTxs(getTxidsResponse.Txids, peer)
+		_, err = this.SyncTxs(getTxidsResponse.Txids, peer, processid)
 		if err != nil {
 			glog.Infof("TouchstoneServer.SyncUnconfirmTx SyncTxs %s err:%s", pubkey, err)
 			continue
@@ -571,10 +583,10 @@ func (this *TouchstoneServer) SyncState(syncAll bool, processid string) error {
 	}
 	count, err := this.PartitionInfoRepository.GetPartitionsCount()
 	if err != nil {
-		glog.Infof("TouchstoneServer.SyncState GetPartitionsCount %s", err)
+		glog.Infof("TouchstoneServer.SyncState GetPartitionsCount %s %s", err, processid)
 		return err
 	}
-	this.SyncUnconfirmTx()
+	this.SyncUnconfirmTx(processid)
 
 	expectPartitionsCount := (feeQuote.Payload.CurrentHighestBlockHeight-*conf.GStartHeight)/conf.PARTITION_BLOCK_COUNT + 1
 	start := count - conf.RE_CONPUTE_PARTITION_COUNT
@@ -585,7 +597,7 @@ func (this *TouchstoneServer) SyncState(syncAll bool, processid string) error {
 	for i := start; i < expectPartitionsCount; i++ {
 		this.AddNeedRecomputehashPartition(i)
 	}
-	return this.SyncPatitions(start, expectPartitionsCount)
+	return this.SyncPatitions(start, expectPartitionsCount, processid)
 }
 
 func (this *TouchstoneServer) ConnectPeer(peerConfigs []*conf.PeerConfig) error {
@@ -621,13 +633,13 @@ func (this *TouchstoneServer) ConnectPeer(peerConfigs []*conf.PeerConfig) error 
 func (this *TouchstoneServer) ConnectPeerLoop(peerConfigs []*conf.PeerConfig) {
 	for {
 		processId := util.RandStringBytes(8)
-		glog.Infof("CheckTxStateLoop ConnectPeerLoop start %s", processId)
+		glog.Infof("TouchstoneServer ConnectPeerLoop start %s", processId)
 		err := this.ConnectPeer(peerConfigs)
 		if err == nil {
-			glog.Infof("CheckTxStateLoop ConnectPeerLoop total done %s", processId)
+			glog.Infof("TouchstoneServer ConnectPeerLoop total done %s", processId)
 			return
 		}
-		glog.Infof("CheckTxStateLoop ConnectPeerLoop done %s", processId)
+		glog.Infof("TouchstoneServer ConnectPeerLoop done %s", processId)
 		time.Sleep(time.Minute)
 	}
 }
@@ -674,33 +686,25 @@ func (this *TouchstoneServer) SetSpentLoop() {
 }
 
 func (this *TouchstoneServer) SyncStateLoop() {
-	count := 0
-	syncAll := false
 	for {
 		processId := util.RandStringBytes(8)
 		glog.Infof("TouchstoneServer SyncStateLoop start %s", processId)
-		//every hour sync all state once
-		if count%12 == 0 {
-			syncAll = true
-		}
-		err := this.SyncState(syncAll, processId)
+		err := this.SyncState(true, processId)
 		if err != nil {
 			glog.Infof("TouchstoneServer.SyncStateLoop SyncState err:%s", err)
 		}
-		syncAll = false
-		count++
 		glog.Infof("TouchstoneServer SyncStateLoop done %s", processId)
 		time.Sleep(time.Minute * 5)
 	}
 }
 
-func (this *TouchstoneServer) NotifiedTxs(request *message.NotifyTxsRequest, peerPubkey string) {
+func (this *TouchstoneServer) NotifiedTxs(request *message.NotifyTxsRequest, peerPubkey string, processid string) {
 	peer, ok := this.Peers()[peerPubkey]
 	if !ok {
 		glog.Infof("TouchstoneServer.NotifiedTxs err:peer not found %s", peerPubkey)
 		return
 	}
-	_, err := this.SyncTxs(request.Txids, peer)
+	_, err := this.SyncTxs(request.Txids, peer, processid)
 	if err != nil {
 		glog.Infof("TouchstoneServer.NotifiedTxs SyncTxs %s err:%s", peerPubkey, err)
 		return
@@ -762,13 +766,19 @@ func (this *TouchstoneServer) CheckTxState() error {
 			}
 			continue
 		}
-		if msgTxBriefInfo.BlockHash != txState.Payload.BlockHash || msgTxBriefInfo.Height != txState.Payload.BlockHeight {
+
+		currentheight := txState.Payload.BlockHeight
+		if currentheight == 0 {
+			currentheight = models.UNCONFIRM_TX_HEIGHT
+		}
+
+		if msgTxBriefInfo.BlockHash != txState.Payload.BlockHash || msgTxBriefInfo.Height != currentheight {
 			err := this.TxInfoRepository.SetMsgTxHeightHash(msgTxBriefInfo.Txid, txState.Payload.BlockHeight, txState.Payload.BlockHash)
 			if err != nil {
 				glog.Infof("TouchstoneServer.CheckTxState ClearMsgTx %s", err)
 				return err
 			}
-			this.AddNeedRecomputehashPartition(msgTxBriefInfo.Height)
+			this.AddNeedRecomputehashPartitionByHeight(msgTxBriefInfo.Height)
 		}
 	}
 	return nil
@@ -787,13 +797,21 @@ func (this *TouchstoneServer) CheckTxStateLoop() {
 	}
 }
 
-func (this *TouchstoneServer) Init(nodeConfigs []*conf.PeerConfig, privateKeyHex string) error {
+func (this *TouchstoneServer) SetPrivateKey(privateKeyHex string) error {
 	keyByte, err := hex.DecodeString(privateKeyHex)
 	if err != nil {
 		return err
 	}
 	privateKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), keyByte)
 	this.privateKey = privateKey
+	return nil
+}
+
+func (this *TouchstoneServer) Init(nodeConfigs []*conf.PeerConfig, privateKeyHex string) error {
+	err := this.SetPrivateKey(privateKeyHex)
+	if err != nil {
+		return err
+	}
 	err = this.ConnectPeer(nodeConfigs)
 	if err != nil {
 		go this.ConnectPeerLoop(nodeConfigs)
@@ -816,7 +834,7 @@ func TxPoints2TxInventory(txPoints []*models.TxPoint) *TxInventory {
 	return txInventory
 }
 
-func (this *TouchstoneServer) SendRawTransaction(rawTx string) (*TxInventory, error) {
+func (this *TouchstoneServer) SendRawTransaction(rawTx string, processid string) (*TxInventory, error) {
 	msgTxByte, err := hex.DecodeString(rawTx)
 	if err != nil {
 		return nil, err
@@ -833,7 +851,7 @@ func (this *TouchstoneServer) SendRawTransaction(rawTx string) (*TxInventory, er
 	txidbytes := [][]byte{
 		util.GetHashByte(hash),
 	}
-	syncTxsResult, err := this.SyncTxs(txidbytes, localSingleTxSource)
+	syncTxsResult, err := this.SyncTxs(txidbytes, localSingleTxSource, processid)
 	if err != nil {
 		return nil, err
 	}
@@ -876,14 +894,20 @@ func (this *TouchstoneServer) GetPartitionsHash(req *message.GetPartitionsHashRe
 }
 
 func (this *TouchstoneServer) GetUnconfirmTxids(request *message.GetUnconfirmTxidsRequest) (*message.GetTxidsResponse, error) {
-	txidBsons, err := this.TxInfoRepository.GetTxidsByHeightRangeOrderByTxid(-1, 1, models.TX_STATE_CLOSED, true)
+	txidBsons, err := this.TxInfoRepository.GetTxidsByHeightRangeOrderByTxid(-1, 1, models.TX_STATE_CLOSED, false)
 	if err != nil {
 		return nil, err
 	}
 	getTxidsResponse := &message.GetTxidsResponse{
 		Txids: make([][]byte, 0, len(txidBsons)),
 	}
+	txidSet := make(map[string]bool)
 	for _, txidBson := range txidBsons {
+		_, ok := txidSet[txidBson.Txid]
+		if ok {
+			continue
+		}
+		txidSet[txidBson.Txid] = true
 		txidByte, err := hex.DecodeString(txidBson.Txid)
 		if err != nil {
 			return nil, err
@@ -897,13 +921,19 @@ func (this *TouchstoneServer) GetPartitionsTxids(request *message.GetTxidsByPart
 	getTxidsResponse := &message.GetTxidsResponse{
 		Txids: make([][]byte, 0, 128),
 	}
+	txidSet := make(map[string]bool)
 	for _, id := range request.Ids {
 		start := *conf.GStartHeight + conf.PARTITION_BLOCK_COUNT*id
-		txidBsons, err := this.TxInfoRepository.GetTxidsByHeightRangeOrderByTxid(start, start+conf.PARTITION_BLOCK_COUNT, models.TX_STATE_CLOSED, true)
+		txidBsons, err := this.TxInfoRepository.GetTxidsByHeightRangeOrderByTxid(start, start+conf.PARTITION_BLOCK_COUNT, models.TX_STATE_CLOSED, false)
 		if err != nil {
 			return nil, err
 		}
 		for _, txidBson := range txidBsons {
+			_, ok := txidSet[txidBson.Txid]
+			if ok {
+				continue
+			}
+			txidSet[txidBson.Txid] = true
 			txidByte, err := hex.DecodeString(txidBson.Txid)
 			if err != nil {
 				return nil, err

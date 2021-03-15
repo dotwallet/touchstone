@@ -21,7 +21,7 @@ func (this *SendRawTransactionReq) NewHttpReqBody() interceptor.HttpReqBody {
 
 func (this *HttpController) SendRawTransaction(rsp http.ResponseWriter, req *http.Request, httpReqStruct interceptor.HttpReqBody, reqid string) (interface{}, error) {
 	request := httpReqStruct.(*SendRawTransactionReq)
-	return this.TouchstoneServer.SendRawTransaction(request.RawTx)
+	return this.TouchstoneServer.SendRawTransaction(request.RawTx, reqid)
 }
 
 type GetTransactionInventoryReq struct {

@@ -196,7 +196,7 @@ here is a example for config
 {
     "Env": "mainnet",
     "MongoHost": "127.0.0.1:27017",
-    "MempoolHost": "api.ddpurse.com",
+    "MempoolHost": "https://api.ddpurse.com",
     "MempoolPkiMnemonic": "border napkin domain blush hammer what avocado venue delay network tell art",
     "MempoolPkiMnemonicPassword": "",
     "ServerPrivatekey": "9a4d8f5f2f7ad34f90bfcafe2961aabc71bdee0df63f3c4cc2b95fbc93a5572f",

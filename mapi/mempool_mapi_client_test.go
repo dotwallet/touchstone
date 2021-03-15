@@ -9,7 +9,8 @@ import (
 var gMempoolMapiClient *MapiClient
 
 func init() {
-	mapiClient, err := NewMempoolMapiClient("api.ddpurse.com", "border napkin domain blush hammer what avocado venue delay network tell art", "")
+	// mapiClient, err := NewMempoolMapiClient("https://api.ddpurse.com", "border napkin domain blush hammer what avocado venue delay network tell art", "")
+	mapiClient, err := NewMempoolMapiClient("http://192.168.1.13:6001", "border napkin domain blush hammer what avocado venue delay network tell art", "")
 	if err != nil {
 		panic(err)
 	}

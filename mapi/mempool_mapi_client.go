@@ -107,9 +107,9 @@ func NewMempoolMapiClient(host string, mnemonicWords string, password string) (*
 	if err != nil {
 		return nil, err
 	}
-	getFeeQuoteUrl := fmt.Sprintf("https://%s/v1/mapi/feeQuote", host)
-	getTxStateUrl := fmt.Sprintf("https://%s/v1/mapi/tx/", host)
-	sendRawTxUrl := fmt.Sprintf("https://%s/v1/mapi/tx", host)
+	getFeeQuoteUrl := fmt.Sprintf("%s/v1/mapi/feeQuote", host)
+	getTxStateUrl := fmt.Sprintf("%s/v1/mapi/tx/", host)
+	sendRawTxUrl := fmt.Sprintf("%s/v1/mapi/tx", host)
 	mempoolMapiAdaptor := &MempoolMapiAdaptor{
 		privateKey:     privateKey,
 		Host:           host,
