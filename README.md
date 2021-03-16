@@ -1,8 +1,8 @@
-# touchstone
+# Touchstone
 
-&emsp;&emsp;touchstone is a tool to verify badge transaction.
+&emsp;&emsp;Touchstone is a tool to verify badge transaction.
 
-## <span id="index">index</span>
+## <span id="index">Index</span>
 - [index](#index)
 
 - [introduce](#introduce)
@@ -12,23 +12,23 @@
 - [how to run](#howtorun)
 
 - [api method](#apimethod)
-## <span id="introduce">introduce</span>
+## <span id="introduce">Introduce</span>
 
 - [background](#background)
 - [badge script](#badgescript)
 - [badge protocol](#badgeprotocol)
-### <span id="background">background</span>
-&emsp;&emsp;for now,in the current bsv community, it has not been able to propose a practical complete layer one token issuance solution.even more and more partial layer one solutions try their best to do as many as possible jobs in layer one,it still can't just let user simply trust a transaction come from net without any layer two verification.and most partial layer one solutions also cause more fee,wait longer,worse user experience. some of them can't even transfer decentralized. so if we can't get rid of layer two verification and layer two verification cost basically same no matter what solution you take,why not just let layer two verification take more responsibility? it uses the simpler way to implement same function with no additional consumption and bring the same or even better user experience.
+### <span id="background">Background</span>
+&emsp;&emsp;For now,in the current bsv community, it has not been able to propose a practical complete layer one token issuance solution. Even more and more partial layer one solutions try their best to do as many as possible jobs in layer one,it still can't just let user simply trust a transaction come from net without any layer two verification. And most partial layer one solutions also cause more fee,wait longer,worse user experience. Some of them can't even transfer decentralized. So if we can't get rid of layer two verification and layer two verification cost basically same no matter what solution you take,why not just let layer two verification take more responsibility? It uses the simpler way to implement same function with no additional consumption and bring the same or even better user experience.
 
-&emsp;&emsp;and so ,badge came into being.
+&emsp;&emsp;And so ,badge came into being.
 
-&emsp;&emsp;badge is a token issuance solution,which mainly in layer two. it is base on utxo model,and allow anyone transfer decentralized,verify decentralized. and touchstone is a tool to verify badge transaction.
+&emsp;&emsp;Badge is a token issuance solution,which mainly in layer two. It is base on utxo model,and allow anyone transfer decentralized,verify decentralized. And touchstone is a tool to verify badge transaction.
 
-### <span id="badgescript">badge script</span>
+### <span id="badgescript">Badge Script</span>
 
 - badge vout
 
-&emsp;&emsp;badge script was generated via scrypt
+&emsp;&emsp;Badge script was generated via scrypt
 
 ```js
 contract Badge{
@@ -46,11 +46,11 @@ contract Badge{
 }
 ```
 
-&emsp;&emsp;here is a badge vout example:
+&emsp;&emsp;Here is a badge vout example:
 ```
 1 64 0 81 -49 -50 OP_NOP <pubkey hash> 0 1 OP_PICK 1 OP_ROLL OP_DROP OP_NOP 8 OP_PICK 6261646765 OP_EQUAL OP_VERIFY 9 OP_PICK OP_HASH160 1 OP_PICK OP_EQUAL OP_VERIFY 10 OP_PICK 10 OP_PICK OP_CHECKSIG OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_RETURN 1027000000000000
 ```
-it represent `<pubkey hash>`  own `10000`(little end 1027000000000000) of some kind badge 
+It represent `<pubkey hash>`  own `10000`(little end 1027000000000000) of some kind badge 
 
 - badge vin 
 
@@ -62,13 +62,13 @@ to unlock. `<badge flag>` is "badge" .
 
 
 
-### <span id="badgeprotocol">badge protocol</span>
+### <span id="badgeprotocol">Badge Protocol</span>
 
-&emsp;&emsp;consider we have a badge utxo set,let see what will happen when transtions come. for now ,the utxo set is empty.
+&emsp;&emsp;Consider we have a badge utxo set,let see what will happen when transtions come. For now ,the utxo set is empty.
 
 - issuance
 
-&emsp;&emsp;if there is a `tx1` like this:
+&emsp;&emsp;If there is a `tx1` like this:
 
 | vin           | vout                     |
 | ------------- | ------------------------ |
@@ -78,13 +78,13 @@ to unlock. `<badge flag>` is "badge" .
 |               | badge vout 4, contain 30 |
 |               | ...                      |
 
-with at least one badge format vout and no badge format vin,we consider it is a badge issuance. vout order does not matter. it can also contain other kind srcipt.
+with at least one badge format vout and no badge format vin,we consider it is a badge issuance. Vout order does not matter. It can also contain other kind srcipt.
 
-and now ,our utxo set got 
+And now ,our utxo set got 
 
 `<badge vout 1,contain 50>` `<badge vout 2,contain 40>` `<badge vout 3,contain 30>` `<badge vout 4,contain 30>` , the transaction issue 150 badge.
 
-and another `tx2` like:
+And another `tx2` like:
 
 | vin                  | vout                              |
 | -------------------- | --------------------------------- |
@@ -93,9 +93,9 @@ and another `tx2` like:
 
 our utxo set will be:  
 
-`<badge vout 1,contain 50>` `<badge vout 2,contain 40>` `<badge vout 3,contain 30>` `<badge vout 4,contain 30>` `<badge vout 5,contain 1000>`,
+`<badge vout 1,contain 50>` `<badge vout 2,contain 40>` `<badge vout 3,contain 30>` `<badge vout 4,contain 30>` `<badge vout 5,contain 1000>`.
 
-but we should know `<badge format vout 5,contain 1000>>` is different from others. may be we can call them 
+But we should know `<badge format vout 5,contain 1000>>` is different from others. May be we can call them 
 
 `<badge vout 1,contain 50 of b1>` `<badge vout 2,contain 40 of b1>` `<badge vout 3,contain 30 of b1>` `<badge vout 4,contain 30 of b1>` `<badge vout 5,contain 1000 of b2>`
 
@@ -104,7 +104,7 @@ but we should know `<badge format vout 5,contain 1000>>` is different from other
 
 - transfer 
 
-&emsp;&emsp;if alice wants to transfer bob 70 b1,carol 10 b1,and get change, we may see `tx3` like:
+&emsp;&emsp;If alice wants to transfer bob 70 b1,carol 10 b1,and get change, we may see `tx3` like:
 
 | vin                             | vout                            |
 | ------------------------------- | ------------------------------- |
@@ -117,7 +117,7 @@ our utxo set will be:
 
 `<badge vout 3,contain 30 of b1>` `<badge vout 4,contain 30 of b1>` `<badge vout 5,contain 1000 of b2>` `<badge vout 6,contain 70 of b1>` `<badge vout 7,contain 10 of b1>` `<badge vout 8,contain 10 of b1>`
 
-&emsp;&emsp;if we see `tx4`
+&emsp;&emsp;If we see `tx4`
 
 | vin                             | vout                            |
 | ------------------------------- | ------------------------------- |
@@ -133,7 +133,7 @@ our utxo set will be:
 `<badge vout 4,contain 30 of b1>` `<badge vout 5,contain 1000 of b2>` `<badge vout 6,contain 70 of b1>` `<badge vout 8,contain 10 of b1>`
 
 
-&emsp;&emsp;if we see tx5
+&emsp;&emsp;If we see tx5
 
 | vin                               | vout                              |
 | --------------------------------- | --------------------------------- |
@@ -151,7 +151,7 @@ our utxo set will be:
 
 - burn
 
-&emsp;&emsp;if we see tx6
+&emsp;&emsp;If we see tx6
 
 | vin                             | vout                             |
 | ------------------------------- | -------------------------------- |
@@ -171,27 +171,27 @@ and tx7 :
 our utxo set will be:  
 `<badge vout 11,contain 20 of b1>`
 
-if there is a transaction,vout badge count is less than vin,we can easily find that total badge utxo set contain is getting less. so we can use `tx6` and `tx7` to burn the badge. by the way, `tx4` and `tx5` also reduce the count of badge, you may use it too.
+If there is a transaction,vout badge count is less than vin,we can easily find that total badge utxo set contain is getting less. So we can use `tx6` and `tx7` to burn the badge. By the way, `tx4` and `tx5` also reduce the count of badge, you may use it too.
 
 
 
-## <span id="howtobuild">how to build</span>
+## <span id="howtobuild">How To Build</span>
 
--  make sure you got golang and all grpc protobuf support in your env
+-  Make sure you got golang and all grpc protobuf support in your env
 ```shell
 sh build.sh
 ```
-## <span id="howtorun">how to run</span>
+## <span id="howtorun">How To Run</span>
 
 
-to run a touchstone node , you at least need 
+To run a touchstone node , you at least need 
 - mongo
 - mapi support
 - a private key of bitcoin for yourself
 - known peers pubkey and host
 - let peers have your pubkey
 
-here is a example for config
+Here is a example for config
 ```json
 {
     "Env": "mainnet",
@@ -222,14 +222,14 @@ and then just run
 
 
 ### mapi support
-- this version of code only support mapi provided by mempool, you can easily replace it by any provider. just implement `MapiClientAdaptor` in `mapi/mapi_client.go`,and modify code in `main.go`
+- This version of code only support mapi provided by mempool, you can easily replace it by any provider. Just implement `MapiClientAdaptor` in `mapi/mapi_client.go`,and modify code in `main.go`
 ```golang
 	mapiClient, err := mapi.NewMempoolMapiClient(config.MempoolHost, config.MempoolPkiMnemonic, config.MempoolPkiMnemonicPassword)
 ```
 
-for now ,touchstone relay on mapi to verify transaction.In the future,we may access bitcoin p2p network
+For now ,touchstone relay on mapi to verify transaction.In the future, we may access bitcoin p2p network
 
-## <span id="apimethod">api method</span>
+## <span id="apimethod">Api Method</span>
 
 - [sendrawtransaction](#sendrawtransaction)
 
