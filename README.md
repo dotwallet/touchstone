@@ -53,6 +53,8 @@ BSV 生态系统中目前有几种创建 token 数字通证的方法。在大多
 
 尽管世上还未实现纯粹的第 1 层 token 发行解决方案，但是我们现在可以使用 Badge 和 Touchstone 至少能使第 2 层验证更去中心化和高效。钱包提供商可以放心地接受其他钱包用户创建的 token，并在自己的服务器上快速对其进行验证。能减少外部请求、节省了时间和网费，并且还增加了对 token 的信任和信心。
 
+![touchstone-flow-chart](https://gateway.pinata.cloud/ipfs/QmTpyj5H6Lrt9UgY2PQ7cC7sRFtZLdmTA86RMqCsm1TLXg)
+
 ### <span id="badgescript">Badge Script</span>
 
 #### Badge vout
