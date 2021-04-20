@@ -5,11 +5,12 @@ Touchstone is a tool to verify Badge transactions. It brings true decentralizati
 
 ## <span id="index">Index</span>
 
-- [index](#index)
-- [introduction](#introduce)
-- [how to build](#howtobuild)
-- [how to run](#howtorun)
-- [api methods](#apimethods)
+- [Index](#index)
+- [Introduction](#introduce)
+- [How to build](#howtobuild)
+- [How to run](#howtorun)
+- [How to use](#howtouse)
+- [Api methods](#apimethods)
 
 ## <span id="introduction">Introduction</span>
 
@@ -25,7 +26,7 @@ _试金石解决了什么问题？_
 Before Touchstone, if a wallet user received a transaction that included token information (often in OP_RETURN), it was impossible to verify without asking a trusted 3rd-party oracle. That is centralized and inefficient.
 有了试金石之前，如果一个钱包收到了一笔附带 Badge 信息的交易（一般是在 OP_RETURN 附带）那么他很难判断这个 token 是不是合法的。之前的解决方法是访问一个中心化的 oracle（预言节点）服务器，那样不去中心化而且效率很低。
 
-Touchstone can verify a token without a third party oracle. Anyone who wants to verify Badges can run their own server and do so. Because verifying the token does not need to rely on 3rd party, this saves transaction time and cost.
+Touchstone can verify a token without a third party oracle. Anyone who wants to verify Badges can run their own Touchstone server and do so. Because verifying the token does not need to rely on 3rd party, this saves transaction time and cost.
 试金石可以自己验证通证，不用依赖第三方 oracle，任何有运行服务器的人可以验证 Badge 通证交易。因为不用依赖第三方，能节省时间和交易成本。
 
 - [background](#background)
@@ -40,7 +41,7 @@ However, when receiving such a transaction, how am I to know that these are vali
 
 _Badge_ is a token issuance method, also based on the layer-1/layer-2 model, but does not require a centralized validator. It is based on the Bitcoin utxo model, which enables decentralized transfer and validation of tokens.
 
-_Touchstone_ is a tool to verify badge transactions. It is designed to be run on a server, and servers running Touchstone can be called Touchstone nodes.
+_Touchstone_ is a tool to verify badge transactions. It is designed to be run on a server, and servers running Touchstone can be called Touchstone nodes. The Touchstone node network will sync and store badge related transaction info for easy querying. The Touchstone network can also store some basic [user info](#setaddrinfo) for ease of use between wallet providers.
 
 While a purely layer-1 solution to token issuance has yet to be found, we can now, with Badge and Touchstone, at least make the layer-2 validation more decentralized and efficient. Wallet providers can confidently accept tokens created by users of other wallets, and quickly verify them on their own server. This saves time and bandwidth by removing the need for several external requests, and also increases trust and confidence in the tokens.
 
@@ -48,7 +49,7 @@ BSV 生态系统中目前有几种创建 token 数字通证的方法。在大多
 
 *Badge*是一种 token 发行方法，也基于第 1 层/第 2 层模型，但是不需要中心化验证。它基于比特币 utxo 模型，该模型可实现 token 的去中心化转移和验证。
 
-*Touchstone/试金石*是验证 Badge 交易的工具。它是在服务器上运行，运行 Touchstone 的服务器可以称为 Touchstone 节点。
+*Touchstone/试金石*是验证 Badge 交易的工具。它是在服务器上运行，运行 Touchstone 的服务器可以称为 Touchstone 节点。试金石节点网络会储存和同步 Badge 相关的交易历史和信息。试金石网络也可以储存一些和用户相关的[基本信息](#setaddrinfo)，让钱包的用户信息同步更加方便。
 
 尽管世上还未实现纯粹的第 1 层 token 发行解决方案，但是我们现在可以使用 Badge 和 Touchstone 至少能使第 2 层验证更去中心化和高效。钱包提供商可以放心地接受其他钱包用户创建的 token，并在自己的服务器上快速对其进行验证。能减少外部请求、节省了时间和网费，并且还增加了对 token 的信任和信心。
 
@@ -56,9 +57,10 @@ BSV 生态系统中目前有几种创建 token 数字通证的方法。在大多
 
 #### Badge vout
 
-Badges is a script written in [sCrypt](https://scrypt.io/):
+Badges is a script written in [sCrypt](https://scrypt.io/). It creates a simple token initialized with a public key, which can only be unlocked with a signature from a matching public key.
 
-```c#
+```java
+// Badge contract source code (sCrypt):
 contract Badge{
     Ripemd160 pubKeyHash;
 
@@ -66,15 +68,15 @@ contract Badge{
         this.pubKeyHash = pubKeyHash;
     }
 
-    public function unlock(Sig sig,PubKey pubKey,bytes badgeFlag){
-        require(badgeFlag == b'6261646765');
+    public function unlock(Sig sig, PubKey pubKey, bytes badgeFlag){
+        require(badgeFlag == b'6261646765'); // b'6261646765' is "badge" in hex
         require(hash160(pubKey) == this.pubKeyHash);
-        require(checkSig(sig,pubKey));
+        require(checkSig(sig, pubKey));
     }
 }
 ```
 
-When badges are issued(minted) or transferred, they are included in a 'lock script' within a Bitcoin transaction. The transaction `vout` will look like this:
+When badges are issued(minted) or transferred, they are included in a 'lock script' within a Bitcoin transaction. The transaction `vout` will look like something like this:
 
 ```
 1 64 0 81 -49 -50 OP_NOP <pubkey hash> 0 1 OP_PICK 1 OP_ROLL OP_DROP OP_NOP 8 OP_PICK 6261646765 OP_EQUAL OP_VERIFY 9 OP_PICK OP_HASH160 1 OP_PICK OP_EQUAL OP_VERIFY 10 OP_PICK 10 OP_PICK OP_CHECKSIG OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_NIP OP_RETURN 1027000000000000
@@ -82,124 +84,112 @@ When badges are issued(minted) or transferred, they are included in a 'lock scri
 
 This is saying that public key: `<pubkey hash>` owns: `10000`, (or 1027000000000000 in [Little-Endian](https://learnmeabitcoin.com/technical/little-endian)), of some kind of badge
 
-A badge‘s ID is the first transaction's txid
-Often times a description and some metadata about the token will also be included in the first (minting) transactino OP_RETURN
+A badge‘s ID is the first transaction's txid.
+A description and some metadata about the token will also often be included in the first (minting) transaction's OP_RETURN
 
 #### Badge vin
 
-To unlock the coins, the `vout` above, you will need to create a `vin` (Written in [p2pkh](https://learnmeabitcoin.com/technical/p2pkh)) like:
+To unlock the tokens from the `vout` above, you will need to create a `vin` (Written in [p2pkh](https://learnmeabitcoin.com/technical/p2pkh)) like:
 
 ```bash
 # For `<badge-flag>` pass in "badge" .
 <sig> <pubkey> <badge-flag>
+# Example:
+304402200...40851a70cb02 026f...aee8b78b badge
 ```
 
 ### <span id="badgeprotocol">Badge Protocol</span>
 
-Consider we have a badge utxo set,let see what will happen when transtions come. For now ,the utxo set is empty.
+#### Issuance
 
-- issuance
+If the utxo set has at least one badge format vout and no badge format vin, it is a badge issuance.
+during issuance. there can be no badge vins. The badge code will be the issuance transaction's txid
 
-If there is a `tx1` like this:
+An initial issuing, or 'minting', of badge tokens will have a utxo set like this:
 
-| vin           | vout                     |
-| ------------- | ------------------------ |
-| not badge vin | badge vout 1, contain 50 |
-| ...           | badge vout 2, contain 40 |
-|               | badge vout 3, contain 30 |
-|               | badge vout 4, contain 30 |
-|               | ...                      |
+| txid: 0001 | vin                 | vout                                |
+| ---------- | ------------------- | ----------------------------------- |
+|            | no badge format vin | badge vout 1: 1000 tokens of tx0001 |
+|            | ...                 | ...                                 |
 
-with at least one badge format vout and no badge format vin,we consider it is a badge issuance. Vout order does not matter. It can also contain other kind srcipt.
+Which shows that this transaction is issuing 1000 tokens.
 
-And now ,our utxo set got
+Issuances can also have multiple vouts:
 
-`<badge vout 1,contain 50>` `<badge vout 2,contain 40>` `<badge vout 3,contain 30>` `<badge vout 4,contain 30>` , the transaction issue 150 badge.
+| txid: 0002 | vin                 | vout                              |
+| ---------- | ------------------- | --------------------------------- |
+|            | no badge format vin | badge vout 1: 90 tokens of tx0002 |
+|            | ...                 | badge vout 2: 10 tokens of tx0002 |
+|            |                     | badge vout 3: 80 tokens of tx0002 |
+|            |                     | badge vout 4: 20 tokens of tx0002 |
+|            |                     | ...                               |
 
-And another `tx2` like:
+Which shows that this transaction is issuing 200 tokens split between 4 outputs
 
-| vin                  | vout                              |
-| -------------------- | --------------------------------- |
-| not badge format vin | badge format vout 5, contain 1000 |
-| ...                  | ...                               |
+> Vout order does not matter. Vouts can also contain other kinds of scripts without effecting the badges.
 
-our utxo set will be:
+> You can not issue two kinds of badges in one transaction.
 
-`<badge vout 1,contain 50>` `<badge vout 2,contain 40>` `<badge vout 3,contain 30>` `<badge vout 4,contain 30>` `<badge vout 5,contain 1000>`.
+### Transfer
 
-But we should know `<badge format vout 5,contain 1000>>` is different from others. May be we can call them
+Say Alice received 100 of the tx0002 tokens (vout 1 and 2 above). If she wants to send Bob 70 tx0002 tokens, Carol 10, and get back the change, we could create a utxo set like this:
 
-`<badge vout 1,contain 50 of b1>` `<badge vout 2,contain 40 of b1>` `<badge vout 3,contain 30 of b1>` `<badge vout 4,contain 30 of b1>` `<badge vout 5,contain 1000 of b2>`
+| txid: 0003 | vin                                             | vout                              |
+| ---------- | ----------------------------------------------- | --------------------------------- |
+|            | badge vout 1 (from tx0002): 90 tokens of tx0002 | badge vout 1: 70 tokens of tx0002 |
+|            | badge vout 2 (from tx0002): 10 tokens of tx0002 | badge vout 2: 10 tokens of tx0002 |
+|            |                                                 | badge vout 3: 20 tokens of tx0002 |
 
-- transfer
+Bob could then send his tokens to Dave and Edward:
 
-If alice wants to transfer bob 70 b1,carol 10 b1,and get change, we may see `tx3` like:
+| txid: 0004 | vin                                             | vout                              |
+| ---------- | ----------------------------------------------- | --------------------------------- |
+|            | badge vout 1 (from tx0003): 70 tokens of tx0002 | badge vout 1: 50 tokens of tx0002 |
+|            |                                                 | badge vout 2: 20 tokens of tx0002 |
 
-| vin                             | vout                            |
-| ------------------------------- | ------------------------------- |
-| <badge vout 1,contain 50 of b1> | <badge vout 6,contain 70 of b1> |
-| <badge vout 2,contain 40 of b1> | <badge vout 7,contain 10 of b1> |
-| ...                             | <badge vout 8,contain 10 of b1> |
+#### Invalid transfer: vout > vin
 
-our utxo set will be:
+Transfers where the sum of tokens in vout exceeds the sum of tokens vin are invalid:
 
-`<badge vout 3,contain 30 of b1>` `<badge vout 4,contain 30 of b1>` `<badge vout 5,contain 1000 of b2>` `<badge vout 6,contain 70 of b1>` `<badge vout 7,contain 10 of b1>` `<badge vout 8,contain 10 of b1>`
+| txid: 0005 | vin                     | vout                    |
+| ---------- | ----------------------- | ----------------------- |
+|            | badge vout 1: 90 tokens | badge vout 1: 99 tokens |
 
-If we see `tx4`
+> These transfers are still recorded on chain. The tokens from the vin of an invalid transfer will be burned.
 
-| vin                             | vout                            |
-| ------------------------------- | ------------------------------- |
-| <badge vout 3,contain 30 of b1> | <badge vout 9,contain 41 of b1> |
-| <badge vout 7,contain 10 of b1> | ...                             |
-| ...                             |                                 |
+#### Invalid transfer: 2 different badge tokens
 
-because vout badge count is greater than vin,so `<badge vout 9,contain 41 of b1>` will not be token,but `<badge vout 3,contain 30 of b1>` `<badge vout 7,contain 20 of b1>` is still gone.
+| txid: 0006 | vin                                              | vout                              |
+| ---------- | ------------------------------------------------ | --------------------------------- |
+|            | badge vout 1 (from tx0001): 100 tokens of tx0001 | badge vout 1: 50 tokens of tx0001 |
+|            | badge vout 2 (from tx0002): 70 tokens of tx0002  | badge vout 1: 50 tokens of tx0002 |
 
-our utxo set will be:
+We may upgrade protocol to support this case in the future, but now for now, this kind of transaction will be invalid.
 
-`<badge vout 4,contain 30 of b1>` `<badge vout 5,contain 1000 of b2>` `<badge vout 6,contain 70 of b1>` `<badge vout 8,contain 10 of b1>`
+> The tokens from the vin of an invalid transfer will be burned.
 
-If we see tx5
+### Burning tokens
 
-| vin                               | vout                              |
-| --------------------------------- | --------------------------------- |
-| <badge vout 4,contain 30 of b1>   | <badge vout 10,contain 1030 of ?> |
-| <badge vout 5,contain 1000 of b2> | ...                               |
-| ...                               |                                   |
+If the sum of the tokens in vout is less than the sum of the tokens in vin, the remaining tokens will be burned.
 
-even vout badge count is not greater than vin,but vin contains `b1` and `b2`,which is not support for now. we may upgrade protocol to support this case in the future, but now ,`<badge vout 10,contain 1030 of ?>` will not be token and `<badge vout 4,contain 30 of b1>` `<badge vout 5,contain 1000 of b2>` is gone.
+| txid: 0007 | vin                      | vout                    |
+| ---------- | ------------------------ | ----------------------- |
+|            | badge vout 1: 100 tokens | badge vout 1: 50 tokens |
+|            |                          | badge vout 2: 10 tokens |
 
-our utxo set will be:
+Because vin contains 100 tokens and vout contains 60 tokens, 40 tokens were burned.
 
-`<badge vout 6,contain 70 of b1>` `<badge vout 8,contain 10 of b1>`
+Transactions with empty vouts also burn tokens:
 
-- burn
+| txid: 0007 | vin                      | vout |
+| ---------- | ------------------------ | ---- |
+|            | badge vout 1: 100 tokens |      |
 
-If we see tx6
-
-| vin                             | vout                             |
-| ------------------------------- | -------------------------------- |
-| <badge vout 6,contain 70 of b1> | <badge vout 11,contain 20 of b1> |
-| ...                             | ...                              |
-
-our utxo set will be:  
-`<badge vout 8,contain 10 of b1>` `<badge vout 11,contain 20 of b1>`
-
-and tx7 :
-
-| vin                             | vout |
-| ------------------------------- | ---- |
-| <badge vout 8,contain 10 of b1> | ...  |
-| ...                             | ...  |
-
-our utxo set will be:  
-`<badge vout 11,contain 20 of b1>`
-
-If there is a transaction,vout badge count is less than vin,we can easily find that total badge utxo set contain is getting less. So we can use `tx6` and `tx7` to burn the badge. By the way, `tx4` and `tx5` also reduce the count of badge, you may use it too.
+All 100 tokens were burned
 
 ## <span id="howtobuild">How To Build</span>
 
-- Make sure you got golang and all grpc protobuf support in your env
+- Make sure you have golang and all grpc protobuf supported in your env
 
 ```shell
 sh build.sh
@@ -207,15 +197,17 @@ sh build.sh
 
 ## <span id="howtorun">How To Run</span>
 
-To run a touchstone node , you at least need
+To run a touchstone node, you need:
 
-- mongo
-- mapi support
-- a private key of bitcoin for yourself
-- known peers pubkey and host
-- let peers have your pubkey
+To run a touchstone node, you'll need:
 
-Here is a example for config
+- Mongo DB
+- MAPI support
+- A Bitcoin private key that belongs to you
+- Public keys and ip ports of other nodes
+- To let other nodes know your public key
+
+Example configuration:
 
 ```json
 {
@@ -241,23 +233,35 @@ Here is a example for config
 }
 ```
 
-and then just run
+Then just run:
 
 ```shell
 ./touchstone -config=config.json -log_dir=logs
 ```
 
-### mapi support
+### Mapi support
 
-- This version of code only support mapi provided by mempool, you can easily replace it by any provider. Just implement `MapiClientAdaptor` in `mapi/mapi_client.go`,and modify code in `main.go`
+- This version of Touchstone only supports mapi provided by mempool, but you can edit the code to easily replace it with any provider. Just implement `MapiClientAdaptor` in `mapi/mapi_client.go`, and modify the code in `main.go`
 
 ```golang
 	mapiClient, err := mapi.NewMempoolMapiClient(config.MempoolHost, config.MempoolPkiMnemonic, config.MempoolPkiMnemonicPassword)
 ```
 
-For now ,touchstone relay on mapi to verify transaction.In the future, we may access bitcoin p2p network
+For now, touchstone relies on mapi to verify transactions. In the future, we may change it to access the bitcoin p2p network directly.
 
-## <span id="apimethod">Api Method</span>
+## <span id="howtouse">How To Use</span>
+
+1. Send tokens:
+
+   - use [sendbadgetoaddress](#sendbadgetoaddress) to create an unsigned transaction.
+   - Sign it and send it like any other Bitcoin SV transaction.
+
+2. Verify badge transactions:
+   - Most of the rest of the API methods can be used to check how many valid badge tokens were included in a transaction or are associated with an address, and to query badge transaction histories.
+3. Save and get user info:
+   - Use [setaddrinfo](#setaddrinfo) and [getuserbalance](#getuserbalance)
+
+## <span id="apimethod">Api Methods</span>
 
 - [sendrawtransaction](#sendrawtransaction)
 
@@ -281,13 +285,17 @@ For now ,touchstone relay on mapi to verify transaction.In the future, we may ac
 
 ### <span id="sendrawtransaction">sendrawtransaction</span>
 
-- params
+- Description
+
+Broadcast a transaction to the Touchstone nodes network. Other touchstone nodes will save and sync this transaction. This must be a completed raw transaction from a successful on-chain transaction.
+
+- Params
 
 | param | required | note            |
 | ----- | -------- | --------------- |
 | rawtx | true     | raw transaction |
 
-- req
+- Request
 
 ```shell
 curl -X POST --data '{
@@ -295,9 +303,9 @@ curl -X POST --data '{
 }' http://127.0.0.1:7789/v1/touchstone/sendrawtransaction
 ```
 
-- rsp
+- Response
 
-  - when it came to vout,`pretxid` and `preindex` will always be empty str and -1
+  - In vout, `pretxid` and `preindex` will always be an empty str and -1
 
 ```json
 {
@@ -354,13 +362,17 @@ curl -X POST --data '{
 
 ### <span id="gettxinventory">gettxinventory</span>
 
-- params
+- Description
+
+Inspect how many badge tokens were included in a transaction.
+
+- Params
 
 | param | required | note           |
 | ----- | -------- | -------------- |
 | txid  | true     | transaction id |
 
-- req
+- Request
 
 ```shell
 curl -X POST --data '{
@@ -368,8 +380,8 @@ curl -X POST --data '{
 }' http://127.0.0.1:7789/v1/touchstone/gettxinventory
 ```
 
-- rsp
-  - when it came to vout,`pretxid` and `preindex` will always be empty string and -1
+- Response
+  - In vout, `pretxid` and `preindex` will always be an empty string and -1
 
 ```json
 {
@@ -426,16 +438,20 @@ curl -X POST --data '{
 
 ### <span id="getaddrutxos">getaddrutxos</span>
 
-- params
+- Description
 
-| param      | required | note             |
-| ---------- | -------- | ---------------- |
-| addr       | true     | addr             |
-| badge_code | true     | badge code       |
-| offset     | false    | offset,defalut 0 |
-| limit      | false    | limit,defalut 10 |
+Get the badge related utxos for an address.
 
-- req
+- Params
+
+| param      | required | note              |
+| ---------- | -------- | ----------------- |
+| addr       | true     | address           |
+| badge_code | true     | badge code        |
+| offset     | false    | offset, default 0 |
+| limit      | false    | limit, default 10 |
+
+- Request
 
 ```shell
 curl -X POST --data '{
@@ -444,8 +460,8 @@ curl -X POST --data '{
 }' http://127.0.0.1:7789/v1/touchstone/getaddrutxos
 ```
 
-- rsp
-  - when it came to vout,`pretxid` and `preindex` will always be empty string and -1
+- Response
+  - In vout, `pretxid` and `preindex` will always be an empty string and -1
 
 ```json
 {
@@ -480,14 +496,18 @@ curl -X POST --data '{
 
 ### <span id="getaddrbalance">getaddrbalance</span>
 
-- params
+- Description
+
+Get the total balance of a specific badge token for an address.
+
+- Params
 
 | param      | required | note       |
 | ---------- | -------- | ---------- |
-| addr       | true     | addr       |
+| addr       | true     | address    |
 | badge_code | true     | badge code |
 
-- req
+- Request
 
 ```shell
 curl -X POST --data '{
@@ -496,7 +516,7 @@ curl -X POST --data '{
 }' http://127.0.0.1:7789/v1/touchstone/getaddrbalance
 ```
 
-- rsp
+- Response
 
 ```json
 {
@@ -510,16 +530,21 @@ curl -X POST --data '{
 
 ### <span id="getaddrinventorys">getaddrinventorys</span>
 
-- params
+- Description
 
-| param      | required | note             |
-| ---------- | -------- | ---------------- |
-| addr       | true     | addr             |
-| badge_code | true     | badge code       |
-| offset     | false    | offset,defalut 0 |
-| limit      | false    | limit,defalut 10 |
+Get the badge transaction history for a certain badge token for an address.
+Negative values are outgoing transactions.
 
-- req
+- Params
+
+| param      | required | note              |
+| ---------- | -------- | ----------------- |
+| addr       | true     | address           |
+| badge_code | true     | badge code        |
+| offset     | false    | offset, default 0 |
+| limit      | false    | limit, default 10 |
+
+- Request
 
 ```shell
 curl -X POST --data '{
@@ -528,7 +553,7 @@ curl -X POST --data '{
 }' http://127.0.0.1:7789/v1/touchstone/getaddrinventorys
 ```
 
-- rsp
+- Response
 
 ```json
 {
@@ -555,16 +580,20 @@ curl -X POST --data '{
 
 ### <span id="setaddrinfo">setaddrinfo</span>
 
-- params
+- Description
 
-| param      | required | note                                                  |
-| ---------- | -------- | ----------------------------------------------------- |
-| userid     | true     | user id                                               |
-| appid      | true     | recommended to indicate the usefulness of the address |
-| user_index | true     | in case one user have more than one wallet            |
-| addr       | true     | addr                                                  |
+Associate an address with some user and wallet information. This information will be stored by Touchstone nodes. Query this info with [getuserbalance](#getuserbalance).
 
-- req
+- Params
+
+| param      | required | note                                                        |
+| ---------- | -------- | ----------------------------------------------------------- |
+| userid     | true     | user id                                                     |
+| appid      | true     | Recommended to indicate the tpye or use case of the address |
+| user_index | true     | Useful if a user has more than one wallet                   |
+| addr       | true     | address                                                     |
+
+- Request
 
 ```shell
 curl -X POST --data '{
@@ -575,7 +604,7 @@ curl -X POST --data '{
 }' http://127.0.0.1:7789/v1/touchstone/setaddrinfo
 ```
 
-- rsp
+- Response
 
 ```json
 {
@@ -587,7 +616,11 @@ curl -X POST --data '{
 
 ### <span id="getuserutxos">getuserutxos</span>
 
-- params
+- Description
+
+Get badge related utxos for a specific badge and user.
+
+- Params
 
 | param      | required | note                          |
 | ---------- | -------- | ----------------------------- |
@@ -595,10 +628,10 @@ curl -X POST --data '{
 | userid     | true     | user id set by setaddrinfo    |
 | user_index | true     | user index set by setaddrinfo |
 | badge_code | true     | badge code                    |
-| offset     | false    | offset,defalut 0              |
-| limit      | false    | limit,defalut 10              |
+| offset     | false    | offset, default 0             |
+| limit      | false    | limit, default 10             |
 
-- req
+- Request
 
 ```shell
 curl -X POST --data '{
@@ -609,7 +642,7 @@ curl -X POST --data '{
 }' http://127.0.0.1:7789/v1/touchstone/getuserutxos
 ```
 
-- rsp
+- Response
 
 ```json
 {
@@ -644,7 +677,11 @@ curl -X POST --data '{
 
 ### <span id="getuserbalance">getuserbalance</span>
 
-- params
+- Description
+
+Query user info and balance of a certain badge.
+
+- Params
 
 | param      | required | note                          |
 | ---------- | -------- | ----------------------------- |
@@ -653,7 +690,7 @@ curl -X POST --data '{
 | user_index | true     | user index set by setaddrinfo |
 | badge_code | true     | badge code                    |
 
-- req
+- Request
 
 ```shell
 curl -X POST --data '{
@@ -664,7 +701,7 @@ curl -X POST --data '{
 }' http://127.0.0.1:7789/v1/touchstone/getuserbalance
 ```
 
-- rsp
+- Response
 
 ```json
 {
@@ -678,7 +715,11 @@ curl -X POST --data '{
 
 ### <span id="getuserinventorys">getuserinventorys</span>
 
-- params
+- Description
+
+Get the transaction history for a certain user and certain badge.
+
+- Params
 
 | param      | required | note                          |
 | ---------- | -------- | ----------------------------- |
@@ -686,10 +727,10 @@ curl -X POST --data '{
 | userid     | true     | user id set by setaddrinfo    |
 | user_index | true     | user index set by setaddrinfo |
 | badge_code | true     | badge code                    |
-| offset     | false    | offset,defalut 0              |
-| limit      | false    | limit,defalut 10              |
+| offset     | false    | offset, default 0             |
+| limit      | false    | limit, default 10             |
 
-- req
+- Request
 
 ```shell
 curl -X POST --data '{
@@ -700,7 +741,7 @@ curl -X POST --data '{
 }' http://127.0.0.1:7789/v1/touchstone/getuserinventorys
 ```
 
-- rsp
+- Response
 
 ```json
 {
@@ -727,23 +768,23 @@ curl -X POST --data '{
 
 ### <span id="sendbadgetoaddress">sendbadgetoaddress</span>
 
-- describe
+- Description
 
-create a unsigned insufficient fee transaction
+Create an unsigned insufficient fee transaction
 
-- params
+- Params
 
-| param        | required | note                                                                 |
-| ------------ | -------- | -------------------------------------------------------------------- |
-| appid        | true     | app id set by setaddrinfo                                            |
-| userid       | true     | user id set by setaddrinfo                                           |
-| user_index   | true     | user index set by setaddrinfo                                        |
-| badge_code   | true     | badge code                                                           |
-| addr_amounts | false    | reveiver's addr and amount,allow empty,for just burn or collect utxo |
-| amount2burn  | false    | amount to burn                                                       |
-| change_addr  | true     | change address                                                       |
+| param        | required | note                                                                |
+| ------------ | -------- | ------------------------------------------------------------------- |
+| appid        | true     | app id set by setaddrinfo                                           |
+| userid       | true     | user id set by setaddrinfo                                          |
+| user_index   | true     | user index set by setaddrinfo                                       |
+| badge_code   | true     | badge code                                                          |
+| addr_amounts | false    | receiver's address and amount. Leave empty for burn or collect utxo |
+| amount2burn  | false    | amount to burn                                                      |
+| change_addr  | true     | address to send change to                                           |
 
-- req
+- Request
 
 ```shell
 curl -X POST --data '{
@@ -762,7 +803,7 @@ curl -X POST --data '{
 }' http://127.0.0.1:7789/v1/touchstone/sendbadgetoaddress
 ```
 
-- rsp
+- Response
 
 ```json
 {
